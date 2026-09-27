@@ -28,7 +28,9 @@ Before interruption, the run reported 17 failures across five server files. Focu
 
 The three Codex fixtures previously reached credential preflight before their mocked adapters. The fake per-agent key satisfies that preflight before it inspects credential files; adapter execution and native backends remain mocked. Local checks use disposable HOME, PAPERCLIP_HOME, and CODEX_HOME paths, a controlled environment, and PAPERCLIP_DISABLE_CWD_ENV_FILE=true because imported configuration can otherwise load local settings. Production authentication and all original behavior assertions remain unchanged. A host-level dummy key did not satisfy this per-agent requirement and was not retained as the solution.
 
-GitHub CI initially passed 53 UI tests and 11 helper tests, plus token rules, UI typechecking, and a UI build. The pending workflow adds the three corrected lifecycle suites and checks their report for all 51 passing tests, with no skips. Remote execution of this new job is still pending. This targeted workflow is not full engine verification.
+GitHub [CI run 36335183112](https://github.com/nazeeh111/WorkHarbor/actions/runs/36335183112) passed on `716391fe3fb4ccccc7fe7153b2a446ba039e5e00`: 53 UI tests, 14 helper tests, token rules, UI typechecking/build, and all 51 lifecycle tests (32 + 13 + 6) on Linux. The lifecycle job prepared embedded PostgreSQL and checked the JSON report for exactly those tests, all passed with none skipped. The same 51 tests and 14 helpers also passed locally during the final review. Independent review found the earlier standalone database probe could allow later probes to skip suites; the report gate now rejects that result. This targeted workflow is not full engine verification.
+
+The earlier full build and recursive typecheck evidence is reused: application/runtime source and dependencies have not changed since that check. Subsequent changes are test fixtures, the CI/report gate, and documentation. The source release includes those changes; no old source archive is reused.
 
 ## Limits
 
