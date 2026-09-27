@@ -1,0 +1,38 @@
+name: Verify WorkHarbor
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: workharbor-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  helpers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - run: node --test scripts/workharbor-local.test.mjs scripts/change-packet.test.mjs
+  board:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PAPERCLIP_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @paperclipai/shared build
+      - run: pnpm check:token-gates
+      - run: pnpm --filter @paperclipai/ui exec vitest run src/components/OnboardingWizard.step.test.tsx src/components/SidebarAccountMenu.test.tsx src/App.test.tsx src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
+      - run: pnpm --filter @paperclipai/ui typecheck
+      - run: pnpm --filter @paperclipai/ui build
