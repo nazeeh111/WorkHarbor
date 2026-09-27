@@ -6,7 +6,7 @@ WorkHarbor retains the existing orchestration engine and adds a distinct visual 
 
 ## Local setup
 
-Local startup, task creation and editing, persistence across restart, and desktop/mobile browser checks have passed. See [verification](doc/workharbor-verification.md) for the tested scope and remaining limits.
+This initial adaptation is under validation. Local startup, task creation and editing, persistence across restart, and desktop/mobile browser checks have passed. A bounded inherited-engine test run reported failures that are still being investigated. See [verification](doc/workharbor-verification.md) for the tested scope and remaining limits.
 
 The local launcher supports macOS and Linux from a regular clone or source archive. It rejects linked Git worktrees to avoid loading their separate instance configuration. Windows launcher support is not yet available. The source requires Node.js 24.11 or later, pnpm 9.15.4, and Rust for its native runner. Dependencies are pinned in `pnpm-lock.yaml` and `Cargo.lock`.
 

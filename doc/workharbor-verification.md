@@ -14,7 +14,7 @@ Verified locally on 2026-09-27 with Node 24.14.0, pnpm 9.15.4, pinned Rust 1.97.
 
 ## Broad-suite attempt
 
-`pnpm test:run` was attempted with isolated test state and no provider credentials. Its initial general-server lane did not finish within the bounded local run; the full inherited suite is **incomplete**, not reported as passing. The root command also schedules workspace groups and 147 serial server suites. GitHub CI covers the WorkHarbor helpers and five relevant UI test files, token rules, UI typechecking, and a UI build; it is not the full engine suite.
+`pnpm test:run` was attempted with isolated test state and no provider credentials. Its initial general-server lane was stopped after about 12 minutes; the full inherited suite is **incomplete**, not reported as passing. Before interruption, the run reported 17 failures across five server files: `execution-workspaces-service`, `claude-local-execute`, `heartbeat-stale-queue-invalidation`, `native-session-resumption`, and `heartbeat-workspace-branch-containment`. The first file subsequently passed 66/66 tests in isolation. The remaining four are under focused investigation. The full build overlapped part of the original run, so the original failures cannot yet be attributed to a source defect. The root command also schedules workspace groups and 147 serial server suites. GitHub CI covers the WorkHarbor helpers and five relevant UI test files, token rules, UI typechecking, and a UI build; it is not the full engine suite.
 
 ## Limits
 
