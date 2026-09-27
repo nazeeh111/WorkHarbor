@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.14.0'
       - run: node --test scripts/workharbor-local.test.mjs scripts/change-packet.test.mjs scripts/check-workharbor-lifecycle.test.mjs
@@ -26,7 +26,7 @@ jobs:
       DO_NOT_TRACK: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.14.0'
       - run: corepack enable
@@ -44,7 +44,7 @@ jobs:
       DO_NOT_TRACK: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.14.0'
       - run: corepack enable
