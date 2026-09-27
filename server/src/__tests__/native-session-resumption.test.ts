@@ -55,6 +55,8 @@ const legacyAdapterExecute = vi.hoisted(() => vi.fn(async () => ({
   model: "legacy-test",
 })));
 
+const FAKE_CODEX_API_KEY = "test-only-key-no-provider-execution";
+
 vi.mock("../adapters/index.js", async () => {
   const actual = await vi.importActual<typeof import("../adapters/index.js")>("../adapters/index.js");
   return {
@@ -1379,7 +1381,13 @@ describe.each(["unchanged", "newer_active", "stale_idle"] as const)(
       // fresh run ignores the stale native profile and stays on the legacy path.
       await db
         .update(agents)
-        .set({ adapterType: "codex_local" })
+        .set({
+          adapterType: "codex_local",
+          adapterConfig: {
+            workspaceStrategy: { type: "project_primary" },
+            env: { OPENAI_API_KEY: FAKE_CODEX_API_KEY },
+          },
+        })
         .where(eq(agents.id, agentId));
       await db.insert(issues).values({
         id: freshIssueId,

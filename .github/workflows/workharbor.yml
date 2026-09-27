@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24.14.0'
-      - run: node --test scripts/workharbor-local.test.mjs scripts/change-packet.test.mjs
+      - run: node --test scripts/workharbor-local.test.mjs scripts/change-packet.test.mjs scripts/check-workharbor-lifecycle.test.mjs
   board:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -36,3 +36,26 @@ jobs:
       - run: pnpm --filter @paperclipai/ui exec vitest run src/components/OnboardingWizard.step.test.tsx src/components/SidebarAccountMenu.test.tsx src/App.test.tsx src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck
       - run: pnpm --filter @paperclipai/ui build
+  mocked-run-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PAPERCLIP_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm rebuild @embedded-postgres/linux-x64
+      - run: pnpm --filter @paperclipai/plugin-sdk build
+      - name: Require embedded PostgreSQL test support
+        run: >-
+          pnpm --filter @paperclipai/server exec node --import tsx --input-type=module -e
+          'const { getEmbeddedPostgresTestSupport } = await import("./src/__tests__/helpers/embedded-postgres.ts"); const support = await getEmbeddedPostgresTestSupport(); if (!support.supported) throw new Error(support.reason || "Embedded PostgreSQL unavailable");'
+      - name: Verify mocked run lifecycle without provider credentials
+        run: pnpm --filter @paperclipai/server exec vitest run src/__tests__/heartbeat-stale-queue-invalidation.test.ts src/__tests__/native-session-resumption.test.ts src/__tests__/heartbeat-workspace-branch-containment.test.ts --reporter=default --reporter=json --outputFile=workharbor-lifecycle.json
+      - name: Require all lifecycle tests to execute
+        run: node scripts/check-workharbor-lifecycle.mjs server/workharbor-lifecycle.json

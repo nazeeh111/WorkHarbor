@@ -94,6 +94,8 @@ const adapterExecute = vi.hoisted(() =>
   })),
 );
 
+const FAKE_CODEX_API_KEY = "test-only-key-no-provider-execution";
+
 vi.mock("../adapters/index.js", () => ({
   getServerAdapter: () => ({
     type: "codex_local",
@@ -370,7 +372,7 @@ async function seedBranchContainmentRun(
     role: "engineer",
     status: "idle",
     adapterType: "codex_local",
-    adapterConfig: {},
+    adapterConfig: { env: { OPENAI_API_KEY: FAKE_CODEX_API_KEY } },
     runtimeConfig: {
       heartbeat: {
         wakeOnDemand: true,

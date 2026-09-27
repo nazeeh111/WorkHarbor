@@ -12,9 +12,23 @@ Verified locally on 2026-09-27 with Node 24.14.0, pnpm 9.15.4, pinned Rust 1.97.
 - Relevant onboarding and account-menu tests passed (21 tests after the final interaction/link changes). UI typechecking passed.
 - Full `pnpm -r typecheck` and `pnpm build` passed, including the server, native runner, UI, and CLI. The sandbox initially blocked a temporary IPC socket used by `tsx`; typechecking passed when run with the required local process access. Build warnings included inherited Rust dead-code and UI bundle-size warnings.
 
-## Broad-suite attempt
+## Broad-suite attempt and focused diagnosis
 
-`pnpm test:run` was attempted with isolated test state and no provider credentials. Its initial general-server lane was stopped after about 12 minutes; the full inherited suite is **incomplete**, not reported as passing. Before interruption, the run reported 17 failures across five server files: `execution-workspaces-service`, `claude-local-execute`, `heartbeat-stale-queue-invalidation`, `native-session-resumption`, and `heartbeat-workspace-branch-containment`. The first file subsequently passed 66/66 tests in isolation. The remaining four are under focused investigation. The full build overlapped part of the original run, so the original failures cannot yet be attributed to a source defect. The root command also schedules workspace groups and 147 serial server suites. GitHub CI covers the WorkHarbor helpers and five relevant UI test files, token rules, UI typechecking, and a UI build; it is not the full engine suite.
+`pnpm test:run` was attempted with isolated test state and no provider credentials. Its initial general-server lane was stopped after about 12 minutes; the full inherited suite is **incomplete**, not reported as passing. The root command also schedules workspace groups and 147 serial server suites.
+
+Before interruption, the run reported 17 failures across five server files. Focused diagnosis produced these results:
+
+| File | Focused result | Finding |
+| --- | --- | --- |
+| `execution-workspaces-service` | 66/66 passed | Passed alone with no source edit. The original run overlapped a build; the cause was not established. |
+| `claude-local-execute` | 28/28 passed | The isolated test environment's `CLAUDE_CONFIG_DIR` overrode the fixture's temporary HOME. Removing that extra override fixed the test, with no source edit. |
+| `heartbeat-stale-queue-invalidation` | 32/32 passed | Added an explicitly fake per-agent key to the mocked Codex fixture. |
+| `native-session-resumption` | 13/13 passed | Added an explicitly fake per-agent key to the mocked Codex fixture. |
+| `heartbeat-workspace-branch-containment` | 6/6 passed | Added an explicitly fake per-agent key to the mocked Codex fixture. |
+
+The three Codex fixtures previously reached credential preflight before their mocked adapters. The fake per-agent key satisfies that preflight before it inspects credential files; adapter execution and native backends remain mocked. Local checks use disposable HOME, PAPERCLIP_HOME, and CODEX_HOME paths, a controlled environment, and PAPERCLIP_DISABLE_CWD_ENV_FILE=true because imported configuration can otherwise load local settings. Production authentication and all original behavior assertions remain unchanged. A host-level dummy key did not satisfy this per-agent requirement and was not retained as the solution.
+
+GitHub CI initially passed 53 UI tests and 11 helper tests, plus token rules, UI typechecking, and a UI build. The pending workflow adds the three corrected lifecycle suites and checks their report for all 51 passing tests, with no skips. Remote execution of this new job is still pending. This targeted workflow is not full engine verification.
 
 ## Limits
 
