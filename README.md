@@ -2,7 +2,7 @@
 
 A local workspace for agent tasks, runs, costs, and approvals. Assign work, inspect the output, and keep decisions attached to the task that produced them.
 
-WorkHarbor retains the existing orchestration engine and adds a distinct visual identity, an isolated local launcher, and a selected-file review packet workflow. Provider adapters are configured separately; opening the app does not require a paid API key.
+WorkHarbor retains the existing orchestration engine and adds an isolated local launcher and a selected-file review packet workflow. Provider adapters are configured separately; opening the app does not require a paid API key.
 
 ## Local setup
 
