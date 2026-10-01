@@ -1,12 +1,22 @@
 // @vitest-environment jsdom
 
 import { flushSync } from "react-dom";
+import { useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskMessageScroller } from "./TaskMessageScroller";
-import { TaskChatScrollNavigation } from "./scroll-navigation";
+import { TaskChatScrollNavigation, useTaskChatScrollNavigation } from "./scroll-navigation";
 
 const PILL_SELECTOR = 'button[aria-label="Scroll to latest"]';
+
+/** The mobile owner records window positions in the same history entry. */
+function MobileHistoryPosition({ enabled }: { enabled: boolean }) {
+  const navigation = useTaskChatScrollNavigation();
+  useLayoutEffect(() => {
+    if (enabled) navigation.remember(777, null);
+  }, [enabled, navigation.key, navigation.hash]);
+  return null;
+}
 
 /**
  * jsdom has no layout, so scroll geometry is faked per element: scrollHeight /
@@ -165,6 +175,120 @@ describe("TaskMessageScroller", () => {
     expect(pill()).toBeNull();
     // Mount effect pins to the bottom.
     expect(el.scrollTop).toBe(el.scrollHeight);
+  });
+
+  it("keeps inactive content in document flow without desktop observers or scroll writes", () => {
+    const observe = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      observe = observe;
+      disconnect() {}
+    });
+    function renderInactive(contentKey: number) {
+      flushSync(() => root.render(
+        <TaskMessageScroller scroll={false} contentKey={contentKey}>
+          <div>messages</div>
+        </TaskMessageScroller>,
+      ));
+    }
+    renderInactive(1);
+    const el = scroller();
+    fakeGeometry(el);
+    el.scrollTop = 123;
+    el.dispatchEvent(new Event("scroll", { bubbles: true }));
+    renderInactive(2);
+    expect(el.scrollTop).toBe(123);
+    expect(observe).not.toHaveBeenCalled();
+    expect(el.classList).not.toContain("absolute");
+    expect(el.classList).not.toContain("overflow-y-auto");
+    expect(el.parentElement?.classList).not.toContain("flex-1");
+    expect(el.getAttribute("data-scroll-active")).toBeNull();
+    expect(pill()).toBeNull();
+  });
+
+  it.each([false, true])("preserves its child and desktop navigation position while inactive, then reactivates cleanly (restore=%s)", async (restore) => {
+    document.documentElement.style.setProperty("--motion-scrollbar-idle-delay", "600ms");
+    let initialized = false;
+    function changeMode(scroll: boolean, contentKey: number) {
+      flushSync(() => root.render(
+        <TaskChatScrollNavigation.Provider value={{ key: `mode-switch-entry-${restore}`, hash: "", restore }}>
+          <TaskMessageScroller scroll={scroll} contentKey={contentKey}>
+            <div ref={(node) => {
+              if (node && !initialized) {
+                fakeGeometry(node.parentElement!);
+                initialized = true;
+              }
+            }}>messages</div>
+          </TaskMessageScroller>
+        </TaskChatScrollNavigation.Provider>,
+      ));
+    }
+    changeMode(true, 1);
+    const el = scroller();
+    const child = el.firstElementChild;
+    await scrollTo(el, 150);
+    await waitForPill(true);
+    expect(el.getAttribute("data-scroll-active")).toBe("true");
+
+    changeMode(false, 2);
+    expect(scroller()).toBe(el);
+    expect(el.firstElementChild).toBe(child);
+    expect(el.getAttribute("data-scroll-active")).toBeNull();
+    expect(pill()).toBeNull();
+    await scrollTo(el, 777);
+    changeMode(false, 3);
+    expect(el.scrollTop).toBe(777);
+    expect(pill()).toBeNull();
+
+    changeMode(true, 4);
+    expect(scroller()).toBe(el);
+    expect(el.firstElementChild).toBe(child);
+    // Inactive events must not overwrite the saved desktop history entry.
+    expect(el.scrollTop).toBe(150);
+    expect(el.getAttribute("data-scroll-active")).toBeNull();
+    await scrollTo(el, 200);
+    await waitForPill(true);
+    expect(el.getAttribute("data-scroll-active")).toBe("true");
+  });
+
+  it.each([false, true])("restores the desktop reading anchor after mobile history updates (restore=%s)", async (restore) => {
+    let initialized = false;
+    let rowOffset = 0;
+    function changeMode(scroll: boolean) {
+      flushSync(() => root.render(
+        <TaskChatScrollNavigation.Provider value={{ key: `mode-anchor-entry-${restore}`, hash: "", restore }}>
+          <MobileHistoryPosition enabled={!scroll} />
+          <TaskMessageScroller scroll={scroll} contentKey={rowOffset}>
+            <div data-thread-anchor="reading-row" ref={(node) => {
+              if (!node) return;
+              const viewport = node.parentElement!;
+              if (!initialized) {
+                fakeGeometry(viewport);
+                viewport.getBoundingClientRect = () => ({ top: 0, bottom: 400, height: 400 } as DOMRect);
+                initialized = true;
+              }
+              node.getBoundingClientRect = () => ({
+                top: 300 + rowOffset - viewport.scrollTop,
+                bottom: 400 + rowOffset - viewport.scrollTop,
+                height: 100,
+              } as DOMRect);
+            }}>reading row</div>
+          </TaskMessageScroller>
+        </TaskChatScrollNavigation.Provider>,
+      ));
+    }
+    changeMode(true);
+    const el = scroller();
+    await scrollTo(el, 150);
+    await waitForPill(true);
+    changeMode(false);
+    await scrollTo(el, 777);
+    // New material above the reading row must not displace it on desktop.
+    rowOffset = 200;
+    changeMode(true);
+    expect(scroller()).toBe(el);
+    expect(el.scrollTop).toBe(350);
+    expect(el.firstElementChild?.getBoundingClientRect().top).toBe(150);
+    expect(pill()).not.toBeNull();
   });
 
   it("extends only the streamlined scroll box through the page gutter", () => {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AdapterExecutionTarget } from "@paperclipai/adapter-utils/execution-target";
 import { runChildProcess } from "@paperclipai/adapter-utils/server-utils";
+import { shellQuote } from "@paperclipai/adapter-utils/ssh";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 import { execute } from "./execute.js";
 
@@ -70,9 +71,8 @@ function buildInstallSimulationCommand(commandPath: string, captureDir: string):
   return [
     `mkdir -p ${JSON.stringify(path.dirname(commandPath))}`,
     `mkdir -p ${JSON.stringify(captureDir)}`,
-    `cat > ${JSON.stringify(commandPath)} <<'EOF'`,
-    buildFakeAgentScript(captureDir),
-    "EOF",
+    // Avoid shell heredoc scratch files outside the disposable fixture root.
+    `printf '%s' ${shellQuote(buildFakeAgentScript(captureDir))} > ${shellQuote(commandPath)}`,
     `chmod +x ${JSON.stringify(commandPath)}`,
   ].join("\n");
 }
@@ -237,7 +237,10 @@ printf '%s\\n' '{"type":"result","subtype":"success","session_id":"cursor-sessio
       if (call === 0) {
         return {
           command: input.command,
-          env: input.env,
+          env: {
+            ...input.env,
+            PATH: input.env.PATH ?? process.env.PATH ?? "/usr/bin:/bin",
+          },
           remoteSystemHomeDir: systemHomeDir,
           addedPathEntry: null,
           preferredCommandPath: null,
@@ -271,16 +274,18 @@ printf '%s\\n' '{"type":"result","subtype":"success","session_id":"cursor-sessio
     const runner = {
       execute: async (input: { command: string; args?: string[]; env?: Record<string, string> }) => {
         runnerState.commands.push(input.command);
-        if (input.command === "sh") {
+        // Only the provider installer is simulated. Staging and archive reads
+        // must execute so their stdout carries the actual file-size/content wire.
+        if (input.command === "sh" && input.args?.[1] === SANDBOX_INSTALL_COMMAND) {
           return {
             exitCode: 0,
-          signal: null,
-          timedOut: false,
-          stdout: "",
-          stderr: "",
-          pid: 555,
-          startedAt: new Date().toISOString(),
-        };
+            signal: null,
+            timedOut: false,
+            stdout: "",
+            stderr: "",
+            pid: 555,
+            startedAt: new Date().toISOString(),
+          };
         }
 
         return runChildProcess(`cursor-fresh-lease-${runnerState.commands.length}`, input.command, input.args ?? [], {

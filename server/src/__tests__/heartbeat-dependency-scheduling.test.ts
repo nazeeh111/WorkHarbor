@@ -187,7 +187,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
       permissions: {},
     });
@@ -287,7 +287,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -542,7 +542,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -675,7 +675,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -812,7 +812,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "qa",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -1012,7 +1012,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -1144,7 +1144,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,

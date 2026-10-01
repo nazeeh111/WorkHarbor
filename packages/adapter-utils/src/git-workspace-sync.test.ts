@@ -829,7 +829,8 @@ describe("git workspace sync", () => {
       const scan = await readReferencedSourceGitIgnoredPaths(repo);
 
       expect(scan?.ignoredPaths).toEqual(["secret.env"]);
-    });
+      // The fixture creates 30,000 real files before checking the scan.
+    }, 15_000);
 
     it("routes both scan commands through the registered scheduler instead of spawning git directly", async () => {
       const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-referenced-scheduler-"));

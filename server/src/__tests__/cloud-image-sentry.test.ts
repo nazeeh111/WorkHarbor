@@ -37,7 +37,10 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
-const workflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker-cloud.yml"), "utf8");
+// WorkHarbor intentionally replaces upstream hosted-deployment workflows.
+// Keep Docker/package/probe checks active when this optional workflow is absent.
+const workflowPath = path.join(repoRoot, ".github", "workflows", "docker-cloud.yml");
+const workflow = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : null;
 const serverPackageJson = JSON.parse(
   readFileSync(path.join(repoRoot, "server", "package.json"), "utf8"),
 ) as { peerDependencies?: Record<string, string> };
@@ -137,7 +140,7 @@ describe("cloud image Sentry install", () => {
 
     for (const source of [
       { label: "Dockerfile", text: dockerfile },
-      { label: "docker workflow", text: workflow },
+      ...(workflow === null ? [] : [{ label: "docker workflow", text: workflow }]),
     ]) {
       for (const match of source.text.matchAll(versionPinPattern)) {
         expect(
@@ -164,7 +167,7 @@ describe("cloud image Sentry install", () => {
     ).toContain("@sentry/node");
   });
 
-  it("passes CLOUD_BUNDLED_SERVER_DEPS to the cloud build in the docker workflow", () => {
+  it.skipIf(workflow === null)("passes CLOUD_BUNDLED_SERVER_DEPS to the cloud build in the docker workflow", () => {
     expect(workflow).toMatch(/^\s*CLOUD_BUNDLED_SERVER_DEPS=@sentry\/node\s*$/m);
   });
 

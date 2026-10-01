@@ -19,8 +19,12 @@ import { BUNDLED_PLUGIN_CATALOG } from "../services/bundled-plugins.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
-const workflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker.yml"), "utf8");
-const cloudWorkflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker-cloud.yml"), "utf8");
+// WorkHarbor intentionally omits inherited hosted-deployment workflows.
+// Docker defaults and bundled catalog/package guards remain required.
+const workflowPath = path.join(repoRoot, ".github", "workflows", "docker.yml");
+const cloudWorkflowPath = path.join(repoRoot, ".github", "workflows", "docker-cloud.yml");
+const workflow = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : null;
+const cloudWorkflow = existsSync(cloudWorkflowPath) ? readFileSync(cloudWorkflowPath, "utf8") : null;
 
 function parseList(source: string, pattern: RegExp, label: string): string[] {
   const match = source.match(pattern);
@@ -35,14 +39,14 @@ const dockerfileDefault = parseList(
   /^ARG CLOUD_BUNDLED_PLUGINS="([^"]*)"/m,
   "Dockerfile",
 );
-const workflowArg = parseList(
+const workflowArg = cloudWorkflow === null ? [] : parseList(
   cloudWorkflow,
   /^\s*CLOUD_BUNDLED_PLUGINS=(.*)$/m,
   "docker workflow",
 );
 
 describe("cloud image bundled plugins", () => {
-  it("keeps the Dockerfile default and the workflow build-arg in sync", () => {
+  it.skipIf(cloudWorkflow === null)("keeps the Dockerfile default and the workflow build-arg in sync", () => {
     expect(workflowArg).toEqual(dockerfileDefault);
   });
 
@@ -70,20 +74,20 @@ describe("cloud image bundled plugins", () => {
     },
   );
 
-  it("pins the default image build to the production target", () => {
+  it.skipIf(workflow === null)("pins the default image build to the production target", () => {
     // The Dockerfile's final stage is `cloud`; without an explicit target
     // the workflow's main build would silently publish the cloud variant
     // to the self-hosted tags.
     expect(workflow).toMatch(/^\s*target: production$/m);
   });
 
-  it("publishes the cloud image in its own job with no needs coupling", () => {
-    const caller = workflow.split("  build-and-push-cloud:")[1]?.split("  promote_canary_channel:")[0];
+  it.skipIf(workflow === null || cloudWorkflow === null)("publishes the cloud image in its own job with no needs coupling", () => {
+    const caller = workflow!.split("  build-and-push-cloud:")[1]?.split("  promote_canary_channel:")[0];
     expect(caller, "tag and manual builds must call the cloud workflow").toContain("uses: ./.github/workflows/docker-cloud.yml");
     expect(caller, "the reusable caller must also remain independent of production").not.toMatch(/^\s*needs:/m);
     // The reusable cloud workflow owns its job and SHA concurrency group.
     // Production publication must not gate, delay, or skip the cloud build.
-    const jobsSection = cloudWorkflow.slice(cloudWorkflow.indexOf("\njobs:\n"));
+    const jobsSection = cloudWorkflow!.slice(cloudWorkflow!.indexOf("\njobs:\n"));
     const headers = [...jobsSection.matchAll(/^ {2}([\w-]+):[^\n]*$/gm)];
     expect(
       headers.length,
@@ -108,7 +112,7 @@ describe("cloud image bundled plugins", () => {
     ).not.toMatch(/^\s*needs:/m);
   });
 
-  it("throttles the docker workflow with cancel-in-progress: false", () => {
+  it.skipIf(workflow === null)("throttles the docker workflow with cancel-in-progress: false", () => {
     // Concurrency is declared at the workflow (top) level so a single group
     // spans the whole run, and cancel-in-progress is false so an in-flight
     // image build always finishes — a newer push only supersedes the pending

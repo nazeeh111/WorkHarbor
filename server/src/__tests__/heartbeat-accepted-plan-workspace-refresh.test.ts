@@ -325,7 +325,8 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      // Execution is mocked above; satisfy readiness without host credentials.
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
       createdAt: new Date(),
@@ -499,7 +500,8 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      // Execution is mocked above; satisfy readiness without host credentials.
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -726,7 +728,8 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      // Execution is mocked above; satisfy readiness without host credentials.
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
       createdAt: new Date(),
@@ -885,7 +888,8 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      // Execution is mocked above; satisfy readiness without host credentials.
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
       createdAt: new Date(),
@@ -1045,7 +1049,8 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      // Execution is mocked above; satisfy readiness without host credentials.
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
       createdAt: new Date(),

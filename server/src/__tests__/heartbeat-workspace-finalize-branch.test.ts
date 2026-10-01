@@ -189,7 +189,7 @@ async function seedRunTarget(db: Db, repoRoot: string) {
     role: "engineer",
     status: "idle",
     adapterType: "codex_local",
-    adapterConfig: {},
+    adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
     runtimeConfig: {
       heartbeat: {
         wakeOnDemand: true,

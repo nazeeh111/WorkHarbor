@@ -75,6 +75,12 @@ export function InlineEditor({
   const [multilineEditing, setMultilineEditing] = useState(multiline && defaultEditing);
   const [multilineFocused, setMultilineFocused] = useState(false);
   const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value);
+  const savedValueRef = useRef(value);
+  const draftRevisionRef = useRef(0);
+  const savedRevisionRef = useRef(0);
+  const savePendingRef = useRef(false);
+  const [savePending, setSavePending] = useState(false);
   const lastPropValueRef = useRef(value);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const markdownRef = useRef<MarkdownEditorRef>(null);
@@ -89,17 +95,25 @@ export function InlineEditor({
     reset,
     runSave,
   } = useAutosaveIndicator();
+  const autosaveStateRef = useRef(autosaveState);
+  useEffect(() => {
+    autosaveStateRef.current = autosaveState;
+  }, [autosaveState]);
 
   useEffect(() => {
     const previousValue = lastPropValueRef.current;
+    if (previousValue === value) return;
     lastPropValueRef.current = value;
-    setDraft((currentDraft) => {
-      if (multiline && multilineFocused && currentDraft !== previousValue) {
-        return currentDraft;
-      }
-      return value;
-    });
-  }, [value, multiline, multilineFocused]);
+    savedValueRef.current = value;
+    // A response for an earlier save must not overwrite edits made while it
+    // was pending, even if focus has since moved outside the editor.
+    if (draftRevisionRef.current === savedRevisionRef.current
+      || (!editing && !multilineEditing && !multilineFocused)) {
+      draftRef.current = value;
+      savedRevisionRef.current = draftRevisionRef.current;
+      setDraft(value);
+    }
+  }, [value, editing, multilineEditing, multilineFocused]);
 
   useEffect(() => {
     return () => {
@@ -162,44 +176,66 @@ export function InlineEditor({
     }
     if (!multiline || !multilineEditing) return;
     if (!hasBeenFocusedRef.current) return;
+    if (savePending || draft.trim() !== savedValueRef.current) return;
     if (autosaveState !== "idle") return;
     hasBeenFocusedRef.current = false;
     setMultilineEditing(false);
     onEditingChange?.(false);
-  }, [multiline, multilineEditing, multilineFocused, autosaveState, onEditingChange]);
+  }, [multiline, multilineEditing, multilineFocused, savePending, draft, autosaveState, onEditingChange]);
 
+  const changeDraft = useCallback((nextValue: string) => {
+    if (nextValue === draftRef.current) return;
+    draftRevisionRef.current += 1;
+    draftRef.current = nextValue;
+    setDraft(nextValue);
+    markDirty();
+  }, [markDirty]);
 
-  const commit = useCallback(async (nextValue = draft) => {
-    const valueToSave = nextValue.trim();
-    const valueChanged = valueToSave !== value;
+  // This is the error boundary for saves started by this editor's events and
+  // debounce. The shared hook still rejects for callers that await it; here
+  // its error state keeps the draft editable and exposes an explicit retry.
+  const saveDraft = useCallback(async (retry = false) => {
+    if (savePendingRef.current) return;
+    // Blur is deferred by two animation frames, so its callback may predate
+    // the failure. Only an explicit retry may resubmit that unchanged draft.
+    if (!retry && autosaveStateRef.current === "error") return;
+    const valueToSave = draftRef.current.trim();
+    const valueChanged = valueToSave !== savedValueRef.current;
     const shouldSave = nullable
       ? valueChanged
       : Boolean(valueToSave && valueChanged);
-    if (shouldSave) {
-      await Promise.resolve(onSave(valueToSave));
-    } else {
-      setDraft(value);
+    if (!shouldSave) {
+      draftRef.current = savedValueRef.current;
+      savedRevisionRef.current = draftRevisionRef.current;
+      setDraft(savedValueRef.current);
+      reset();
+      if (!multiline) setEditing(false);
+      return;
     }
-    if (!multiline) {
-      setEditing(false);
+    savePendingRef.current = true;
+    const revisionToSave = draftRevisionRef.current;
+    setSavePending(true);
+    try {
+      await runSave(async () => {
+        await onSave(valueToSave);
+        savedValueRef.current = valueToSave;
+        savedRevisionRef.current = revisionToSave;
+      });
+      if (!multiline && draftRef.current.trim() === valueToSave) setEditing(false);
+    } catch {
+      // runSave has set the visible error state. Leave the current draft in
+      // place, including newer text typed during this request.
+    } finally {
+      savePendingRef.current = false;
+      setSavePending(false);
     }
-  }, [draft, multiline, nullable, onSave, value]);
+  }, [multiline, nullable, onSave, reset, runSave]);
 
   /** Multiline blur/submit: show autosave indicator when persisting */
   const finalizeMultilineBlurOrSubmit = useCallback(() => {
-    const trimmed = draft.trim();
-    if (trimmed === value) {
-      reset();
-      void commit();
-      return;
-    }
-    if (!trimmed && !nullable) {
-      reset();
-      void commit();
-      return;
-    }
-    void runSave(() => commit());
-  }, [commit, draft, nullable, reset, runSave, value]);
+    if (autosaveState === "error") return;
+    void saveDraft();
+  }, [autosaveState, saveDraft]);
 
   const cancelPendingBlurCommit = useCallback(() => {
     if (blurCommitFrameRef.current === null) return;
@@ -222,13 +258,16 @@ export function InlineEditor({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !multiline) {
       e.preventDefault();
-      void commit();
+      if (autosaveState !== "error") void saveDraft();
     }
     if (e.key === "Escape") {
       if (autosaveDebounceRef.current) {
         clearTimeout(autosaveDebounceRef.current);
       }
+      cancelPendingBlurCommit();
       reset();
+      draftRef.current = value;
+      savedRevisionRef.current = draftRevisionRef.current;
       setDraft(value);
       if (multiline) {
         setMultilineFocused(false);
@@ -246,21 +285,16 @@ export function InlineEditor({
 
   useEffect(() => {
     if (!multiline) return;
-    if (!multilineFocused) return;
+    if (!multilineEditing && !multilineFocused) return;
+    if (savePending || autosaveState === "error") return;
     const trimmed = draft.trim();
     // Nullable: empty draft can still be a real edit (clearing); only skip debounce when unchanged or empty is invalid.
-    if (trimmed === value || (!trimmed && !nullable)) {
-      if (autosaveState !== "saved") {
-        reset();
-      }
-      return;
-    }
-    markDirty();
+    if (trimmed === savedValueRef.current || (!trimmed && !nullable)) return;
     if (autosaveDebounceRef.current) {
       clearTimeout(autosaveDebounceRef.current);
     }
     autosaveDebounceRef.current = setTimeout(() => {
-      void runSave(() => commit(trimmed));
+      void saveDraft();
     }, AUTOSAVE_DEBOUNCE_MS);
 
     return () => {
@@ -268,12 +302,27 @@ export function InlineEditor({
         clearTimeout(autosaveDebounceRef.current);
       }
     };
-  }, [autosaveState, commit, draft, markDirty, multiline, multilineFocused, nullable, reset, runSave, value]);
+  }, [autosaveState, draft, multiline, multilineEditing, multilineFocused, nullable, savePending, saveDraft, value]);
+
+  const saveError = autosaveState === "error" ? (
+    <span role="alert" className="flex items-center gap-2 text-(length:--text-micro) text-destructive">
+      Could not save
+      <button
+        type="button"
+        disabled={savePending}
+        className="cursor-pointer underline underline-offset-2"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => { void saveDraft(true); }}
+      >
+        Retry save
+      </button>
+    </span>
+  ) : null;
 
   if (multiline) {
-    const previewValue = autosaveState === "saved" || autosaveState === "idle" ? draft : value;
+    const previewValue = draft;
     const hasValue = Boolean(previewValue.trim());
-    const showEditor = multilineEditing || multilineFocused || !hasValue;
+    const showEditor = multilineEditing || multilineFocused || savePending || autosaveState === "error" || !hasValue;
 
     if (!showEditor) {
       const enterEditMode = () => {
@@ -338,6 +387,7 @@ export function InlineEditor({
           const active = document.activeElement;
           if (!(active instanceof Node) || !event.currentTarget.contains(active)) return;
           cancelPendingBlurCommit();
+          setMultilineEditing(true);
           setMultilineFocused(true);
         }}
         onBlurCapture={(event) => {
@@ -353,7 +403,7 @@ export function InlineEditor({
         <MarkdownEditor
           ref={markdownRef}
           value={draft}
-          onChange={setDraft}
+          onChange={changeDraft}
           placeholder={placeholder}
           bordered={false}
           className="bg-transparent"
@@ -366,47 +416,48 @@ export function InlineEditor({
           }}
         />
         <div className="flex min-h-4 items-center justify-end pr-1">
-          <span
+          {saveError ?? <span
             className={cn(
               "text-(length:--text-micro) transition-opacity duration-150",
-              autosaveState === "error" ? "text-destructive" : "text-muted-foreground",
-              autosaveState === "idle" ? "opacity-0" : "opacity-100",
+              "text-muted-foreground",
+              autosaveState === "idle" || (autosaveState === "saved" && draft.trim() !== savedValueRef.current)
+                ? "opacity-0" : "opacity-100",
             )}
           >
             {autosaveState === "saving"
               ? "Autosaving..."
               : autosaveState === "saved"
                 ? "Saved"
-                : autosaveState === "error"
-                  ? "Could not save"
-                  : "Idle"}
-          </span>
+                : "Idle"}
+          </span>}
         </div>
       </div>
     );
   }
 
   if (editing) {
-
     return (
-      <textarea
-        ref={inputRef}
-        value={draft}
-        rows={1}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          autoSize(e.target);
-        }}
-        onBlur={() => {
-          void commit();
-        }}
-        onKeyDown={handleKeyDown}
-        className={cn(
-          "w-full bg-transparent rounded outline-none resize-none overflow-hidden",
-          pad,
-          className
-        )}
-      />
+      <>
+        <textarea
+          ref={inputRef}
+          value={draft}
+          rows={1}
+          onChange={(e) => {
+            changeDraft(e.target.value);
+            autoSize(e.target);
+          }}
+          onBlur={() => {
+            if (autosaveState !== "error") void saveDraft();
+          }}
+          onKeyDown={handleKeyDown}
+          className={cn(
+            "w-full bg-transparent rounded outline-none resize-none overflow-hidden",
+            pad,
+            className
+          )}
+        />
+        {saveError}
+      </>
     );
   }
 
