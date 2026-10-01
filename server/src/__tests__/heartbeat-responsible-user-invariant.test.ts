@@ -141,7 +141,7 @@ describeEmbeddedPostgres("heartbeat responsible-user invariant", () => {
       role: "engineer",
       status: "active",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
       permissions: {},
     });

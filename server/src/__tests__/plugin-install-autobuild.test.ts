@@ -294,6 +294,7 @@ describeEmbeddedPostgres("plugin install auto-build route", () => {
   }, 20_000);
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
     await db.delete(plugins);
     for (const cleanupPath of cleanupPaths) {
@@ -328,6 +329,9 @@ describeEmbeddedPostgres("plugin install auto-build route", () => {
   }, 60_000);
 
   it("auto-builds standalone bundled local plugins outside the root pnpm workspace", async () => {
+    // This owned fixture has no dependencies and only the inspected SDK-link hook.
+    vi.stubEnv("NPM_CONFIG_IGNORE_SCRIPTS", "false");
+    vi.stubEnv("npm_config_ignore_scripts", "false");
     const fixture = await createBundledPluginFixture("standalone-success", { rootDir: standaloneRepoPluginRoot });
     cleanupPaths.add(fixture.packageRoot);
     const app = await createInstallApp(db);
@@ -350,6 +354,9 @@ describeEmbeddedPostgres("plugin install auto-build route", () => {
   }, 60_000);
 
   it("bootstraps standalone bundled local plugin runtime dependencies when dist already exists", async () => {
+    // This owned fixture has no dependencies and only the inspected SDK-link hook.
+    vi.stubEnv("NPM_CONFIG_IGNORE_SCRIPTS", "false");
+    vi.stubEnv("npm_config_ignore_scripts", "false");
     const fixture = await createBundledPluginFixture("standalone-runtime-success", {
       rootDir: standaloneRepoPluginRoot,
       buildDistImmediately: true,

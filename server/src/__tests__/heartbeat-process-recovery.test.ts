@@ -701,7 +701,9 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: input?.agentStatus ?? "paused",
       adapterType: input?.adapterType ?? "codex_local",
-      adapterConfig: {},
+      adapterConfig: (input?.adapterType ?? "codex_local") === "codex_local" && input?.runtimeMode !== "native"
+        ? { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } }
+        : {},
       runtimeConfig: {},
       permissions: {},
     });
@@ -935,7 +937,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
     });
@@ -1133,7 +1135,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
     });
@@ -1226,7 +1228,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: input?.agentStatus ?? "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {},
       permissions: {},
     });
@@ -1266,7 +1268,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           enabled: true,
@@ -1420,7 +1422,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       role: "engineer",
       status: "idle",
       adapterType: "codex_local",
-      adapterConfig: {},
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       runtimeConfig: {
         heartbeat: {
           wakeOnDemand: true,
@@ -1530,6 +1532,9 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
   it("does not immediately continue a low-trust preflight setup failure", async () => {
     const { agentId, runId, issueId, companyId } =
       await seedQueuedIssueRunFixture();
+    // This refusal concerns workspace isolation, independently of provider auth.
+    await db.update(agents).set({ adapterType: "process", adapterConfig: {} })
+      .where(eq(agents.id, agentId));
     const reviewPreset = {
       id: "low_trust_review",
       version: 1,
@@ -6851,6 +6856,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     });
     await db.update(agents).set({ adapterConfig: {
       command: process.execPath, args: ["-e", "console.log('ready');setInterval(() => {}, 1000)"], graceSec: 1,
+      env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" },
     } }).where(eq(agents.id, agentId));
     mockAdapterExecute.mockImplementationOnce((async (input: unknown) =>
       actualProcess.execute(input as Parameters<typeof actualProcess.execute>[0])) as typeof mockAdapterExecute);
@@ -7448,6 +7454,9 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         .update(agents)
         .set({
           adapterConfig: {
+            ...(adapterType === "codex_local"
+              ? { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } }
+              : {}),
             command: process.execPath,
             args: [
               "-e",
@@ -12430,9 +12439,26 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     });
     await holding;
     const heartbeat = heartbeatService(db);
+    // A Vitest timeout does not cancel an awaited drain. Fail before that
+    // timeout so finally can release the fixture lock and unblock cleanup.
+    async function withinFixtureDeadline(work: () => Promise<void>, phase: string) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          work(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`Contended chat fixture ${phase} exceeded 5s`)), 5_000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
     try {
-      await heartbeat.resumeQueuedRuns();
-      await heartbeat.drainActiveRunExecutions();
+      await withinFixtureDeadline(async () => {
+        await heartbeat.resumeQueuedRuns();
+        await heartbeat.drainActiveRunExecutions();
+      }, "dispatch/drain while lock held");
       expect(
         (
           await db
@@ -12453,6 +12479,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     } finally {
       release();
       await lock;
+      await withinFixtureDeadline(() => heartbeat.drainActiveRunExecutions(), "drain after unlock");
     }
     await heartbeat.resumeQueuedRuns();
     expect(
@@ -14175,7 +14202,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
           role: "engineer",
           status: "idle",
           adapterType: "codex_local",
-          adapterConfig: {},
+          adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
           runtimeConfig: {},
           permissions: {},
         });

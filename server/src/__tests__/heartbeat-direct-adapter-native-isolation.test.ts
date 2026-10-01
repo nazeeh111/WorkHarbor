@@ -163,7 +163,9 @@ describeEmbeddedPostgres("direct adapter native-runner isolation", () => {
         role: "engineer",
         status: "idle",
         adapterType,
-        adapterConfig: {},
+        adapterConfig: adapterType === "codex_local"
+          ? { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } }
+          : {},
         runtimeConfig: {},
         permissions: {},
       });

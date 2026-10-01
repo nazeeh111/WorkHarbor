@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -20,8 +20,10 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const dockerfile = readFileSync(path.join(repoRoot, "Dockerfile"), "utf8");
-const workflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker.yml"), "utf8");
-const cloudWorkflow = readFileSync(path.join(repoRoot, ".github", "workflows", "docker-cloud.yml"), "utf8");
+const workflowPath = path.join(repoRoot, ".github", "workflows", "docker.yml");
+const cloudWorkflowPath = path.join(repoRoot, ".github", "workflows", "docker-cloud.yml");
+const workflow = existsSync(workflowPath) ? readFileSync(workflowPath, "utf8") : null;
+const cloudWorkflow = existsSync(cloudWorkflowPath) ? readFileSync(cloudWorkflowPath, "utf8") : null;
 
 /**
  * Return the text of the Dockerfile stage that starts at the named target.
@@ -68,7 +70,7 @@ describe("docker build-stamp wiring", () => {
     ).toBeLessThan(serverBuildIdx);
   });
 
-  it("passes PAPERCLIP_BUILD_COMMIT as a build-arg for both image targets", () => {
+  it.skipIf(workflow === null || cloudWorkflow === null)("passes PAPERCLIP_BUILD_COMMIT as a build-arg for both image targets", () => {
     const argLines = [...`${workflow}\n${cloudWorkflow}`.matchAll(/^\s*PAPERCLIP_BUILD_COMMIT=.*$/gm)];
     expect(
       argLines.length,

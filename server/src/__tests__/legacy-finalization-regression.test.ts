@@ -81,6 +81,7 @@ describe("P6-32 legacy finalization regression", () => {
       companyId,
       name: "Legacy agent",
       adapterType: "codex_local",
+      adapterConfig: { env: { OPENAI_API_KEY: "synthetic-mocked-adapter-only" } },
       status: "idle",
       runtimeConfig: { heartbeat: { wakeOnDemand: true, maxConcurrentRuns: 1 } },
     });
