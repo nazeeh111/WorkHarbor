@@ -11,6 +11,14 @@ const PIN_THRESHOLD_PX = 48;
 /** Visibility lifecycle of the scroll-to-latest pill. */
 type PillPhase = "hidden" | "in" | "out";
 
+interface DesktopPosition {
+  key: string | undefined;
+  hash: string | undefined;
+  top: number;
+  anchor: ThreadScrollAnchor | null;
+  pinned: boolean;
+}
+
 /**
  * True when animations are disabled (prefers-reduced-motion, or environments
  * without matchMedia such as jsdom). In that case the pill's exit animation
@@ -26,6 +34,8 @@ interface TaskMessageScrollerProps {
   /** Value that changes whenever content that could grow the thread updates. */
   contentKey: unknown;
   className?: string;
+  /** Disable desktop scrolling while retaining the mounted content subtree. */
+  scroll?: boolean;
 }
 
 /**
@@ -44,13 +54,14 @@ interface TaskMessageScrollerProps {
  * the glide cancels it and treats the user as unpinned. Content-driven follow
  * while pinned stays instant, so no reflow/jump happens during streaming.
  */
-export function TaskMessageScroller({ children, contentKey, className }: TaskMessageScrollerProps) {
+export function TaskMessageScroller({ children, contentKey, className, scroll = true }: TaskMessageScrollerProps) {
   const streamlined = useStreamlinedTaskChatPresentation();
   const navigation = useTaskChatScrollNavigation();
   const initialPositionApplied = useRef(false);
   const appliedNavigation = useRef({ key: navigation.key, hash: navigation.hash });
   const ref = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<ThreadScrollAnchor | null>(null);
+  const desktopPositionRef = useRef<DesktopPosition | null>(null);
   const pinnedRef = useRef(true);
   const easingRef = useRef(false);
   const clientHeightRef = useRef<number | null>(null);
@@ -118,15 +129,24 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
 
   const rememberAnchor = useCallback(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!scroll || !el) return;
     const rect = el.getBoundingClientRect();
     anchorRef.current = readThreadScrollAnchor(el, rect.top, rect.bottom);
-    if (initialPositionApplied.current) navigation.remember(el.scrollTop, anchorRef.current);
-  }, [navigation.key, navigation.hash, navigation.ready]);
+    if (initialPositionApplied.current) {
+      desktopPositionRef.current = {
+        key: navigation.key,
+        hash: navigation.hash,
+        top: el.scrollTop,
+        anchor: anchorRef.current,
+        pinned: pinnedRef.current,
+      };
+      navigation.remember(el.scrollTop, anchorRef.current);
+    }
+  }, [scroll, navigation.key, navigation.hash, navigation.ready]);
 
   const reconcileContent = useCallback(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!scroll || !el) return;
     // Clicking latest is an explicit follow intent. If content or the composer
     // changes during its glide, finish at the new bottom instead of restoring
     // the old reading anchor and cancelling the browser's smooth scroll.
@@ -141,7 +161,7 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
       if (delta) el.scrollTop += delta;
     }
     rememberAnchor();
-  }, [rememberAnchor, scrollToBottom, hidePill]);
+  }, [scroll, rememberAnchor, scrollToBottom, hidePill]);
 
   const handleScroll = useCallback(() => {
     rememberAnchor();
@@ -202,7 +222,7 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
   // treating scroll events as easing and consider the user unpinned.
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!scroll || !el) return;
     const cancelEasing = () => {
       if (!easingRef.current) return;
       easingRef.current = false;
@@ -215,7 +235,7 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
       el.removeEventListener("wheel", cancelEasing);
       el.removeEventListener("touchstart", cancelEasing);
     };
-  }, [showPill]);
+  }, [scroll, showPill]);
 
   useEffect(() => () => {
     if (scrollbarIdleTimerRef.current !== null) {
@@ -224,8 +244,29 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
   }, []);
 
   useLayoutEffect(() => {
+    if (scroll) return;
+    // The DOM may already have lost its desktop geometry. Preserve the last
+    // measured position separately from the mobile owner's history writes.
+    if (desktopPositionRef.current) {
+      desktopPositionRef.current.pinned = pinnedRef.current || easingRef.current;
+    }
+    initialPositionApplied.current = false;
+    anchorRef.current = null;
+    pinnedRef.current = true;
+    easingRef.current = false;
+    clientHeightRef.current = null;
+    setPillPhase("hidden");
+    if (scrollbarIdleTimerRef.current !== null) {
+      window.clearTimeout(scrollbarIdleTimerRef.current);
+      scrollbarIdleTimerRef.current = null;
+    }
+    scrollbarIdleDelayRef.current = null;
+    if (ref.current) delete ref.current.dataset.scrollActive;
+  }, [scroll]);
+
+  useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!scroll || !el) return;
     clientHeightRef.current = el.clientHeight;
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => {
@@ -237,32 +278,48 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
     // grows. Observe the content box too, before the browser paints it.
     if (el.firstElementChild) observer.observe(el.firstElementChild);
     return () => observer.disconnect();
-  }, [followViewportResize, hidePill, reconcileContent]);
+  }, [scroll, followViewportResize, hidePill, reconcileContent]);
 
   // Follow new content only when already pinned; otherwise hold position.
   useLayoutEffect(() => {
+    if (!scroll) return;
     const el = ref.current;
     if (appliedNavigation.current.key !== navigation.key || appliedNavigation.current.hash !== navigation.hash) {
       appliedNavigation.current = { key: navigation.key, hash: navigation.hash };
       initialPositionApplied.current = false;
     }
     if (el && navigation.ready && !initialPositionApplied.current) {
-      const top = navigation.initialPosition(el, el.getBoundingClientRect().top, el.scrollTop);
-      if (top !== null) {
-        el.scrollTop = top;
-        pinnedRef.current = isPinned();
-        rememberAnchor();
+      const saved = desktopPositionRef.current;
+      const viewportTop = el.getBoundingClientRect().top;
+      if (saved && saved.key === navigation.key && saved.hash === navigation.hash) {
+        pinnedRef.current = saved.pinned;
+        anchorRef.current = saved.anchor;
+        if (!saved.pinned) {
+          const hasAnchor = saved.anchor && [...el.querySelectorAll<HTMLElement>("[data-thread-anchor]")]
+            .some((row) => row.dataset.threadAnchor === saved.anchor?.id);
+          el.scrollTop = hasAnchor
+            ? el.scrollTop + threadScrollAnchorDelta(el, saved.anchor, viewportTop)
+            : saved.top;
+          showPill();
+        }
+      } else {
+        const top = navigation.initialPosition(el, viewportTop, el.scrollTop);
+        if (top !== null) {
+          el.scrollTop = top;
+          pinnedRef.current = isPinned();
+          rememberAnchor();
+        }
       }
       initialPositionApplied.current = true;
     }
     reconcileContent();
-  }, [contentKey, reconcileContent, navigation.key, navigation.hash, navigation.ready]);
+  }, [scroll, contentKey, reconcileContent, navigation.key, navigation.hash, navigation.ready, showPill]);
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className={scroll ? "relative min-h-0 flex-1" : undefined}>
       <div
         ref={ref}
-        onScroll={handleScroll}
+        onScroll={scroll ? handleScroll : undefined}
         // Keep the viewport tied to the flex-sized wrapper vertically —
         // percentage heights don't reliably resolve against flex-determined
         // block heights, which let the thread overflow the page. In the
@@ -270,17 +327,17 @@ export function TaskMessageScroller({ children, contentKey, className }: TaskMes
         // right gutter; matching padding preserves the message column while
         // placing the scrollbar against the properties-panel boundary.
         className={cn(
-          "task-chat-scroll-viewport scrollbar-while-scrolling absolute inset-y-0 left-0 overflow-y-auto",
-          streamlined
+          scroll && "task-chat-scroll-viewport scrollbar-while-scrolling absolute inset-y-0 left-0 overflow-y-auto",
+          scroll && (streamlined
             ? "-right-4 overflow-x-hidden pr-4 md:-right-6 md:pr-6"
-            : "right-0",
+            : "right-0"),
           className,
         )}
         data-testid="task-chat-scroller"
       >
         {children}
       </div>
-      {pillPhase !== "hidden" ? (
+      {scroll && pillPhase !== "hidden" ? (
         <button
           type="button"
           aria-label="Scroll to latest"

@@ -6,7 +6,7 @@ WorkHarbor retains the existing orchestration engine and adds a distinct visual 
 
 ## Local setup
 
-Local startup, task creation and editing, persistence across restart, and desktop/mobile browser checks have passed. Targeted UI, helper, and mocked lifecycle CI checks passed. The stable runner's default test selection is covered by local partitions, with explicit skips and additional configured projects listed in the verification note. See [verification](doc/workharbor-verification.md) for the tested scope and remaining limits.
+Local startup, task editing, save-failure recovery, persistence after reload, and desktop/mobile resize checks have passed. The current UI build passes 6,318 assertions. All configured test projects are accounted for through recorded partitions and project runs, with 117 explicit applicability skips. See [verification](doc/workharbor-verification.md) for source identities, hosted checks and remaining limits.
 
 The local launcher supports macOS and Linux from a regular clone or source archive. It rejects linked Git worktrees to avoid loading their separate instance configuration. Windows launcher support is not yet available. The source requires Node.js 24.11 or later, pnpm 9.15.4, and Rust for its native runner. Dependencies are pinned in `pnpm-lock.yaml` and `Cargo.lock`.
 

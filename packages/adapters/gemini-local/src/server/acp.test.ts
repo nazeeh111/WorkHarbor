@@ -607,6 +607,7 @@ describe("gemini_local ACP lane", () => {
           cwd: localCwd,
           agentCommand: "node ./fake-acp.js",
           stateDir: path.join(root, "state"),
+          env: { HOME: path.join(root, "home") },
           promptTemplate: "Do the assigned work.",
         },
         context: {
@@ -654,6 +655,7 @@ describe("gemini_local ACP lane", () => {
           cwd: localCwd,
           agentCommand: "node ./fake-acp.js",
           stateDir: path.join(root, "state"),
+          env: { HOME: path.join(root, "home") },
           promptTemplate: "Do the assigned work.",
         },
         context: {

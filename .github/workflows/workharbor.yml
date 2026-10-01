@@ -33,7 +33,15 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm --filter @paperclipai/shared build
       - run: pnpm check:token-gates
-      - run: pnpm --filter @paperclipai/ui exec vitest run src/components/OnboardingWizard.step.test.tsx src/components/SidebarAccountMenu.test.tsx src/App.test.tsx src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
+      - name: Verify board and responsive editor regressions
+        run: >-
+          pnpm --filter @paperclipai/ui exec vitest run
+          src/components/OnboardingWizard.step.test.tsx
+          src/components/SidebarAccountMenu.test.tsx src/App.test.tsx
+          src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
+          src/components/InlineEditor.test.tsx
+          src/components/task-chat/TaskChatThreadView.performance.test.tsx
+          src/components/task-chat/TaskMessageScroller.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck
       - run: pnpm --filter @paperclipai/ui build
   mocked-run-lifecycle:

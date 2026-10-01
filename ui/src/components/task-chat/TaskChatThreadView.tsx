@@ -69,7 +69,7 @@ interface TaskChatThreadViewProps {
   /** Optional streaming-aware key when `tail` changes without changing `items`. */
   contentKey?: unknown;
   className?: string;
-  /** When false, render the list without the scroll container (e.g. previews). */
+  /** When false, keep the list in normal document flow (e.g. mobile or previews). */
   scroll?: boolean;
   attachments?: IssueAttachment[];
 }
@@ -425,10 +425,8 @@ export function TaskChatThreadView({
     </div>
   );
 
-  if (!scroll) return body;
-
   return (
-    <TaskMessageScroller contentKey={contentKey ?? taskChatContentKey(items)}>
+    <TaskMessageScroller scroll={scroll} contentKey={contentKey ?? taskChatContentKey(items)}>
       {body}
     </TaskMessageScroller>
   );
