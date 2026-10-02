@@ -77,6 +77,7 @@ vi.mock("../sentry.js", async () => {
 
 import { heartbeatService } from "../services/heartbeat.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
+import { waitForPendingRunFailureReports } from "../services/run-failure-report.js";
 
 describe("P6-25 pre-result native session recovery", () => {
   let temporary: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
@@ -263,7 +264,10 @@ describe("P6-25 pre-result native session recovery", () => {
     ]);
   }, 30_000);
 
-  afterAll(async () => temporary?.cleanup());
+  afterAll(async () => {
+    await waitForPendingRunFailureReports();
+    await temporary?.cleanup();
+  });
 
   it("filters durable ownership holds before the bounded resume candidate limit", async () => {
     const heldRunIds = Array.from(
@@ -562,13 +566,13 @@ describe("P6-25 pre-result native session recovery", () => {
       phase: "retryable_failure",
       attempt: 1,
     });
+    await waitForPendingRunFailureReports();
     const captureCallsBefore = mockCaptureRunFailure.mock.calls.length;
 
     await claimNativeSessionResumptions({ db, runnerInstanceId: "reaper", runIds: [freshRunId] });
-    // The Sentry report fires without an await inside the reconciler, so a
-    // follow-up round trip to the real database gives that fire-and-forget
-    // call room to complete before this test reads the spy.
-    await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, freshRunId));
+    // Reconciliation starts this report in the background. Wait for that
+    // report, rather than an unrelated query that can finish before it.
+    await waitForPendingRunFailureReports();
 
     const newCaptures = mockCaptureRunFailure.mock.calls.slice(captureCallsBefore);
     expect(newCaptures).toHaveLength(1);
@@ -600,10 +604,11 @@ describe("P6-25 pre-result native session recovery", () => {
       phase: "retryable_failure",
       attempt: 1,
     });
+    await waitForPendingRunFailureReports();
     const captureCallsBefore = mockCaptureRunFailure.mock.calls.length;
 
     await claimNativeSessionResumptions({ db, runnerInstanceId: "reaper", runIds: [freshRunId] });
-    await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, freshRunId));
+    await waitForPendingRunFailureReports();
 
     expect(mockCaptureRunFailure.mock.calls.slice(captureCallsBefore)).toHaveLength(0);
   });
