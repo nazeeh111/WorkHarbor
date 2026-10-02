@@ -259,8 +259,8 @@ existed. A self-hosted operator who wants server error monitoring still
 completes the install step above.
 
 The browser package, `@sentry/browser`, needs no install step. It is
-already a development dependency of the `ui` package, pinned to the same
-exact version, **`10.71.0`**, so the browser code ships inside every
+already a development dependency of the `ui` package, pinned to the
+exact version **`11.0.0`**, so the browser code ships inside every
 build at the audited version. A signed-out browser, or a browser with no
 DSN, never fetches the Sentry chunk — see "DSN delivery to the browser"
 below.
@@ -321,7 +321,13 @@ session query resolves.
 
 The feature uses built-in Sentry options only.
 
-- `sendDefaultPii` is `false`, on both runtimes.
+- The server keeps `sendDefaultPii: false` with `@sentry/node@10.71.0`.
+- The browser uses v11's `dataCollection` options to disable automatic user
+  information and IP inference, cookies, request and response headers,
+  HTTP bodies, URL query parameters, GraphQL documents and variables, AI
+  inputs and outputs, database query data, queue arguments, stack-frame
+  variables, and source context lines. Omitted v11 options enable broader
+  collection, so the browser sets these explicitly.
 - `tracesSampleRate` is `0`, on both runtimes. Paperclip sends no
   performance trace and no profile.
 - There is no `beforeSend` hook and no custom filter, on either runtime.
@@ -359,8 +365,16 @@ below.
 
 ### Browser data
 
-The browser sends no page URL, no referrer, no user agent, and no
-breadcrumb.
+Browser error events carry no page request URL, referrer, user agent, or
+breadcrumb. The initializer removes `HttpContext`, `Breadcrumbs`, and
+v11's separate `Console` integration. Tests capture real SDK events and
+verify `infer_ip: "never"` in the emitted event and no automatic IP in
+release-health sessions.
+
+The retained `BrowserSession` integration can still attach the browser's
+user agent to release-health sessions, as it did in v10. These built-in
+collection controls do not scrub arbitrary content an application explicitly
+passes to Sentry, such as an exception message or manually supplied context.
 
 ### Fail-open behavior
 
@@ -373,7 +387,7 @@ log line and keep running with no error monitoring.
 The lists below name every event and every context field this feature
 sends, so an operator can read what the feature does before turning it on.
 Each Sentry integration name below is verified against the default
-integration list of `@sentry/node@10.71.0` and `@sentry/browser@10.71.0`.
+integration list of `@sentry/node@10.71.0` and `@sentry/browser@11.0.0`.
 
 **Server attribute this feature sets**
 
@@ -440,8 +454,10 @@ integration list of `@sentry/node@10.71.0` and `@sentry/browser@10.71.0`.
 **Browser sources this feature removes**
 
 - `HttpContext` — the page URL, the referrer, and the user agent.
-- `Breadcrumbs` — console output, a click and a keypress target, a
+- `Breadcrumbs` — a click and a keypress target, a
   `fetch` and an `XHR` request URL, and history navigation.
+- `Console` — console output and raw arguments, separated from
+  `Breadcrumbs` in v11.
 
 **Not captured on either runtime**
 

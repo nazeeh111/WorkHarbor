@@ -26,11 +26,11 @@
 // `@sentry/browser` loads through a dynamic import, so Vite puts it in a
 // separate chunk that a browser with no DSN never fetches.
 //
-// Default-integration privacy note: two default integrations copy values
+// Default-integration privacy note: three default integrations copy values
 // this app does not want inside a Sentry event, so the initializer removes
 // them with a built-in Sentry option — no custom filter code:
-//   - `Breadcrumbs` turns a console call, a click, and a fetch call into a
-//     breadcrumb with the raw arguments and the raw request URL.
+//   - `Breadcrumbs` records clicks and fetch calls with raw request URLs.
+//   - `Console` records console calls with raw arguments (separate in v11).
 //   - `HttpContext` copies the page URL, the query string, and the referrer
 //     onto every event.
 // The initializer keeps every other default integration, so the browser
@@ -156,10 +156,27 @@ export function buildBrowserSentryInitOptions(dsn: string): BrowserSentryInitOpt
   return {
     dsn,
     tracesSampleRate: 0,
-    sendDefaultPii: false,
+    // v11 replaces sendDefaultPii and enables these categories by default.
+    // userInfo also controls automatic IP inference for events and sessions.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      frameContextLines: 0,
+    },
     integrations: (defaults) =>
       defaults.filter(
-        (integration) => integration.name !== "HttpContext" && integration.name !== "Breadcrumbs",
+        (integration) =>
+          integration.name !== "HttpContext" &&
+          integration.name !== "Breadcrumbs" &&
+          integration.name !== "Console",
       ),
   };
 }

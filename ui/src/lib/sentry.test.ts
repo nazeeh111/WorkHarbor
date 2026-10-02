@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Event } from "@sentry/browser";
 
 /**
  * Tests for the browser Sentry gate. Unlike the server gate,
@@ -86,18 +87,19 @@ function holdCloseOpen(mocks: ReturnType<typeof mockSentryPackage>): () => void 
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.doUnmock("@sentry/browser");
 });
 
 // A representative default-integration list, shaped like the array
-// `@sentry/browser@10.71.0`'s `getDefaultIntegrations()` returns. Recorded
-// 2026-08-25 with `node -e` against the published package.
+// `@sentry/browser@11.0.0`'s `getDefaultIntegrations()` returns.
 const DEFAULT_INTEGRATION_NAMES = [
-  "InboundFilters",
+  "EventFilters",
   "FunctionToString",
   "ConversationId",
   "BrowserApiErrors",
   "Breadcrumbs",
+  "Console",
   "GlobalHandlers",
   "LinkedErrors",
   "Dedupe",
@@ -301,7 +303,7 @@ describe("buildBrowserSentryInitOptions", () => {
 
     const options = buildBrowserSentryInitOptions(DSN);
 
-    expect(options.sendDefaultPii).toBe(false);
+    expect(options.dataCollection?.userInfo).toBe(false);
     expect(options.tracesSampleRate).toBe(0);
   });
 
@@ -314,7 +316,7 @@ describe("buildBrowserSentryInitOptions", () => {
     expect(options.beforeSendTransaction).toBeUndefined();
   });
 
-  it("the resolved integration list holds no HttpContext integration and no Breadcrumbs integration", async () => {
+  it("the resolved integration list holds no HttpContext, Breadcrumbs, or Console integration", async () => {
     const { buildBrowserSentryInitOptions } = await importFreshSentry();
 
     const options = buildBrowserSentryInitOptions(DSN);
@@ -323,6 +325,7 @@ describe("buildBrowserSentryInitOptions", () => {
 
     expect(names).not.toContain("HttpContext");
     expect(names).not.toContain("Breadcrumbs");
+    expect(names).not.toContain("Console");
   });
 
   it("the resolved integration list keeps GlobalHandlers, BrowserApiErrors, Dedupe, and LinkedErrors", async () => {
@@ -353,19 +356,73 @@ describe("captured event shape against the real @sentry/browser SDK", () => {
    * adds no `beforeSend` of its own (see the "holds no beforeSend hook"
    * test above).
    */
-  async function initRealSentryForTest(onEvent: (event: Record<string, unknown>) => void) {
+  async function initRealSentryForTest(onEvent: (event: Event) => void) {
     const { buildBrowserSentryInitOptions } = await importFreshSentry();
     const Sentry = await import("@sentry/browser");
     Sentry.init({
       ...buildBrowserSentryInitOptions(DSN),
       transport: () => ({ send: async () => ({}), flush: async () => true }),
       beforeSend: (event) => {
-        onEvent(event as unknown as Record<string, unknown>);
+        onEvent(event);
         return event;
       },
     });
     return Sentry;
   }
+
+  it("disables v11 automatic data collection in the real client", async () => {
+    const Sentry = await initRealSentryForTest(() => {});
+
+    expect(Sentry.getClient()?.getDataCollectionOptions()).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: { request: false, response: false },
+      httpBodies: [],
+      urlQueryParams: false,
+      graphQL: { document: false, variables: false },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      stackFrameVariables: false,
+      frameContextLines: 0,
+    });
+  });
+
+  it("tells the ingest server never to infer an IP and emits sessions without an automatic IP", async () => {
+    const { buildBrowserSentryInitOptions } = await importFreshSentry();
+    const Sentry = await import("@sentry/browser");
+    const envelopes: unknown[] = [];
+    Sentry.init({
+      ...buildBrowserSentryInitOptions(DSN),
+      release: "sentry-privacy-test",
+      transport: () => ({
+        send: async (envelope) => {
+          envelopes.push(envelope);
+          return {};
+        },
+        flush: async () => true,
+      }),
+    });
+
+    Sentry.startSession();
+    Sentry.captureSession();
+    Sentry.captureException(new Error("IP policy probe"));
+    await Sentry.flush(2000);
+
+    expect(envelopes).toEqual(expect.arrayContaining([
+      expect.arrayContaining([expect.arrayContaining([
+        [expect.objectContaining({ type: "session" }), expect.objectContaining({
+          attrs: expect.objectContaining({ ip_address: undefined }),
+        })],
+      ])]),
+      expect.arrayContaining([expect.arrayContaining([
+        [expect.objectContaining({ type: "event" }), expect.objectContaining({
+          sdk: expect.objectContaining({ settings: { infer_ip: "never" } }),
+        })],
+      ])]),
+    ]));
+    expect(JSON.stringify(envelopes)).not.toContain("{{auto}}");
+  });
 
   it("an event from a page URL that holds a test capability value carries no request URL, no query string, and no referrer", async () => {
     window.history.pushState({}, "", "/dashboard?token=test-capability-value");
@@ -373,26 +430,25 @@ describe("captured event shape against the real @sentry/browser SDK", () => {
       value: "https://from.example/previous-page",
       configurable: true,
     });
-    let captured: Record<string, unknown> | null = null;
+    const captured: Event[] = [];
     const Sentry = await initRealSentryForTest((event) => {
-      captured = event;
+      captured.push(event);
     });
 
     Sentry.captureException(new Error("boom"));
     await Sentry.flush(2000);
 
-    expect(captured).not.toBeNull();
+    expect(captured).toHaveLength(1);
     // `HttpContext` is the only default integration that writes
     // `event.request`. With it removed, the field never appears.
-    expect((captured as unknown as Record<string, unknown>).request).toBeUndefined();
+    expect(captured[0].request).toBeUndefined();
   });
 
   it("an event captured after a console call and a fetch call carries no breadcrumb", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(async () => new Response("ok")) as unknown as typeof fetch;
-    let captured: Record<string, unknown> | null = null;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    const captured: Event[] = [];
     const Sentry = await initRealSentryForTest((event) => {
-      captured = event;
+      captured.push(event);
     });
 
     // eslint-disable-next-line no-console
@@ -401,8 +457,7 @@ describe("captured event shape against the real @sentry/browser SDK", () => {
     Sentry.captureException(new Error("boom"));
     await Sentry.flush(2000);
 
-    globalThis.fetch = originalFetch;
-    expect(captured).not.toBeNull();
-    expect((captured as unknown as Record<string, unknown>).breadcrumbs).toBeUndefined();
+    expect(captured).toHaveLength(1);
+    expect(captured[0].breadcrumbs).toBeUndefined();
   });
 });
