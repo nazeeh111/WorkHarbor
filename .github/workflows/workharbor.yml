@@ -72,3 +72,8 @@ jobs:
         run: pnpm --filter @paperclipai/server exec vitest run src/__tests__/heartbeat-stale-queue-invalidation.test.ts src/__tests__/native-session-resumption.test.ts src/__tests__/heartbeat-workspace-branch-containment.test.ts --reporter=default --reporter=json --outputFile=workharbor-lifecycle.json
       - name: Require all lifecycle tests to execute
         run: node scripts/check-workharbor-lifecycle.mjs server/workharbor-lifecycle.json
+      - name: Verify AgentMail signatures and durable email intake
+        run: >-
+          pnpm --filter @paperclipai/server exec vitest run
+          src/__tests__/agentmail-api.test.ts
+          src/__tests__/email-channels.integration.test.ts
