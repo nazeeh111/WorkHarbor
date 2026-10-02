@@ -44,6 +44,8 @@ jobs:
           src/components/InlineEditor.test.tsx
           src/components/task-chat/TaskChatThreadView.performance.test.tsx
           src/components/task-chat/TaskMessageScroller.test.tsx
+          src/lib/sentry.test.ts src/lib/sentry-package-version.test.ts
+          src/components/SentryGate.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck
       - run: pnpm --filter @paperclipai/ui build
   mocked-run-lifecycle:
