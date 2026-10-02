@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { Webhook } from "svix";
+import { Webhook, WebhookVerificationError } from "svix";
 import {
   agentmailApi,
   agentmailMessageSchema,
@@ -27,8 +27,8 @@ describe("AgentMail protocol boundary", () => {
     const secret = `whsec_${Buffer.from("a-test-secret-only").toString("base64")}`;
     const body = JSON.stringify({
       event_type: "message.received",
-      message: message(),
-    });
+      message: message({ subject: "こんにちは", text: "Résumé 📨" }),
+    }, null, 2);
     const timestamp = new Date();
     const id = randomUUID();
     const headers = {
@@ -49,6 +49,21 @@ describe("AgentMail protocol boundary", () => {
         secret,
       ),
     ).toThrow();
+  });
+  it("rejects malformed JSON even when its signature is valid", () => {
+    const secret = `whsec_${Buffer.from("a-test-secret-only").toString("base64")}`;
+    const body = '{"event_type":';
+    const timestamp = new Date();
+    const id = randomUUID();
+    const headers = {
+      "svix-id": id,
+      "svix-timestamp": String(Math.floor(timestamp.getTime() / 1000)),
+      "svix-signature": new Webhook(secret).sign(id, timestamp, body),
+    };
+    expect(() => verifyAgentmailWebhook(Buffer.from(body), headers, secret))
+      .toThrow(SyntaxError);
+    expect(() => verifyAgentmailWebhook(Buffer.from(body + " "), headers, secret))
+      .toThrow(WebhookVerificationError);
   });
   it("normalizes both transports and keeps delivery receipts separate from incoming mail", () => {
     const m = { inbox_id: "inbox", message_id: "message" };

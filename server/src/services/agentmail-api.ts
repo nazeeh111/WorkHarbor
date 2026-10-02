@@ -116,7 +116,9 @@ export function verifyAgentmailWebhook(
   headers: Record<string, string>,
   secret: string,
 ): unknown {
-  return new Webhook(secret).verify(body.toString("utf8"), headers);
+  const payload = body.toString("utf8");
+  new Webhook(secret).verify(payload, headers);
+  return JSON.parse(payload);
 }
 export function normalizeAgentmailEvent(value: unknown) {
   const parsed = z
