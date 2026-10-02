@@ -40,6 +40,7 @@ jobs:
           pnpm --filter @paperclipai/ui exec vitest run
           src/components/OnboardingWizard.step.test.tsx
           src/components/SidebarAccountMenu.test.tsx src/App.test.tsx
+          src/i18n/locale-validation.test.ts
           src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
           src/components/InlineEditor.test.tsx
           src/components/task-chat/TaskChatThreadView.performance.test.tsx
