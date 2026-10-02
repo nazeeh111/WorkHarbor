@@ -40,6 +40,7 @@ jobs:
           pnpm --filter @paperclipai/ui exec vitest run
           src/components/OnboardingWizard.step.test.tsx
           src/components/SidebarAccountMenu.test.tsx src/App.test.tsx
+          src/i18n/locale-validation.test.ts
           src/context/BreadcrumbContext.test.tsx src/pages/InviteLanding.test.tsx
           src/components/InlineEditor.test.tsx
           src/components/task-chat/TaskChatThreadView.performance.test.tsx
@@ -81,3 +82,7 @@ jobs:
           pnpm --filter @paperclipai/server exec vitest run
           src/__tests__/agentmail-api.test.ts
           src/__tests__/email-channels.integration.test.ts
+      - name: Typecheck the Vercel Connect adapter against the installed SDK
+        run: pnpm --filter @paperclipai/server exec tsc --project tsconfig.vercel-connect.json
+      - name: Verify scoped Vercel Connect SDK requests without provider calls
+        run: pnpm --filter @paperclipai/server exec vitest run --config vitest.vercel-connect.config.ts

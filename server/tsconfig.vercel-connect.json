@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "rootDir": ".." },
+  "include": ["src/services/vercel-connect.ts", "src/services/vercel-connect*.test.ts"]
+}

@@ -27,6 +27,7 @@ export type VercelConnectFailureCode =
   | "vercel_connect_connector_not_found"
   | "vercel_connect_authorization_required"
   | "vercel_connect_installation_required"
+  | "vercel_connect_invalid_scopes"
   | "vercel_connect_request_failed";
 
 export class VercelConnectClientError extends Error {
@@ -51,6 +52,8 @@ export function vercelConnectFailureMessage(code: VercelConnectFailureCode): str
       return "This Vercel Connect identity needs authorization.";
     case "vercel_connect_installation_required":
       return "This connector must be installed or attached in Vercel before Paperclip can use it.";
+    case "vercel_connect_invalid_scopes":
+      return "The saved Vercel Connect scopes are invalid. Reconnect this tool to restore its reviewed scopes.";
     default:
       return "Vercel Connect could not complete the credential request.";
   }
@@ -131,10 +134,26 @@ export function vercelConnectSdkOptions(
   };
 }
 
+function reviewedScopes(scopes: unknown): string[] {
+  if (!Array.isArray(scopes) || scopes.length === 0) {
+    throw new VercelConnectClientError("vercel_connect_invalid_scopes", 422);
+  }
+  const reviewed: string[] = [];
+  for (const scope of scopes) {
+    if (typeof scope !== "string" || scope.trim().length === 0) {
+      throw new VercelConnectClientError("vercel_connect_invalid_scopes", 422);
+    }
+    reviewed.push(scope);
+  }
+  return reviewed;
+}
+
 function tokenParams(input: VercelConnectTokenRequest): ConnectTokenParams {
   return {
     subject: input.subject,
-    scopes: input.scopes,
+    // SDK v2 defaults omitted scopes to ['*']. Validate stored JSON and copy
+    // the reviewed values before any asynchronous token/authorization request.
+    scopes: reviewedScopes(input.scopes),
     ...(input.resources?.length ? { resources: input.resources } : {}),
     ...(input.installationId ? { installationId: input.installationId } : {}),
   };
@@ -196,8 +215,9 @@ export function createVercelConnectClient(): VercelConnectClient {
     },
     async startAuthorization(input, callbackUrl) {
       assertConfigured();
+      const params = tokenParams(input);
       try {
-        return await startAuthorization(input.connector, tokenParams(input), {
+        return await startAuthorization(input.connector, params, {
           ...vercelConnectSdkOptions(),
           callbackUrl,
         });
@@ -217,7 +237,15 @@ export function createVercelConnectClient(): VercelConnectClient {
       }
     },
     evict(input) {
-      deleteTokenCacheEntry(input.connector, tokenParams(input));
+      // Eviction only deletes a local cache entry. Preserve its original key,
+      // including legacy malformed scopes, so validation cannot block cleanup.
+      // Token acquisition and authorization still use strict tokenParams().
+      deleteTokenCacheEntry(input.connector, {
+        subject: input.subject,
+        scopes: input.scopes,
+        ...(input.resources?.length ? { resources: input.resources } : {}),
+        ...(input.installationId ? { installationId: input.installationId } : {}),
+      });
     },
   };
 }
