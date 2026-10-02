@@ -2301,8 +2301,8 @@ export function DesignGuide() {
           (<span className="font-mono">minSize="240px"</span>) constraints and the middle panel is
           collapsible. Use anywhere a split view is needed.
         </p>
-        <div className="h-48 max-w-2xl overflow-hidden rounded-md border border-border">
-          <ResizablePanelGroup>
+        <div className="h-48 max-w-2xl overflow-x-auto rounded-md border border-border">
+          <ResizablePanelGroup className="min-w-(--sz-480px)">
             <ResizablePanel id="a" minSize="120px" className="bg-muted/30">
               <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                 Panel A
