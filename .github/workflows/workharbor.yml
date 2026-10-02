@@ -49,6 +49,10 @@ jobs:
           src/components/SentryGate.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck
       - run: pnpm --filter @paperclipai/ui build
+      - name: Install Chromium for the isolated panel contract
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify real Skill Studio panels without provider calls
+        run: pnpm exec playwright test --config tests/panels-browser/playwright.config.ts
   mocked-run-lifecycle:
     runs-on: ubuntu-latest
     timeout-minutes: 10
