@@ -2,7 +2,7 @@
 
 A local workspace for agent tasks, runs, costs, and approvals. Assign work, inspect the output, and keep decisions attached to the task that produced them.
 
-WorkHarbor retains the existing orchestration engine and adds an isolated local launcher and a selected-file review packet workflow. Provider adapters are configured separately; opening the app does not require a paid API key.
+WorkHarbor adds isolated local launch defaults, an onboarding exit path and a selected-file review packet workflow. Provider adapters are configured separately; opening the app does not require a paid API key.
 
 ## Local setup
 
@@ -34,11 +34,11 @@ The change-packet helper records the exact contents of explicitly selected files
 
 The core supports company-scoped tasks, agent sessions, budgets, approvals, and persistent run history. Internal package names and API identifiers remain compatible with the base engine. Provider-specific features still require their own configuration and access.
 
-[The adaptation plan](doc/plans/2026-09-27-workharbor-adaptation.md) records the implementation scope. Technical architecture and development references remain under `doc/`; descriptions of upstream hosted services are not WorkHarbor hosting offers.
+[The implementation plan](doc/plans/2026-09-27-workharbor-adaptation.md) records the implementation scope. Technical architecture and development references remain under `doc/`; descriptions of upstream hosted services are not WorkHarbor hosting offers.
 
 ## Source and maintenance
 
-Based on Paperclip v2026.916.1 at `d554c4789ed3930f8a53ac9fdf6503b3187097da`. WorkHarbor changes the local launch defaults, presentation, onboarding exit path, and file-review tooling. The inherited engine and technical reference material remain available; upstream package publishing and hosted-deployment scripts are not WorkHarbor release instructions. This repository is distributed as source, not as an upstream npm package. WorkHarbor changes were developed and checked locally before publication; the initial repository snapshot is not a record of the engine’s development timeline.
+Based on Paperclip v2026.916.1 at `d554c4789ed3930f8a53ac9fdf6503b3187097da`. The inherited engine and technical reference material remain available; upstream package publishing and hosted-deployment scripts are not WorkHarbor release instructions. This repository is distributed as source, not as an upstream npm package. WorkHarbor changes were developed and checked locally before publication; the initial repository snapshot is not a record of the engine’s development timeline.
 
 ## License
 
