@@ -4,9 +4,12 @@ A local desk for agent work and human decisions. Assign tasks, inspect runs and 
 
 WorkHarbor adapts the [Paperclip](https://github.com/paperclipai/paperclip) control plane for an isolated local workspace. Its additions include a loopback-only launcher with separate state, a way to explore before configuring an agent, and a selected-file change-packet helper. Provider adapters are configured separately; opening the workspace does not require an API key.
 
-![A real WorkHarbor task with a synthetic change-packet attachment and its separately recorded digest](assets/portfolio/workharbor-task-review.png)
+<picture>
+  <source media="(max-width: 600px)" srcset="assets/portfolio/workharbor-task-review-mobile.png">
+  <img alt="A real WorkHarbor task with a synthetic change-packet attachment and its separately recorded digest" src="assets/portfolio/workharbor-task-review.png">
+</picture>
 
-*Captured from the local app at 1280 × 800. The task and file are disposable examples; no agent or provider ran. The packet is a manual review aid, not an approval.*
+*Captured from the local app at desktop and 390px widths. The task and file are disposable examples; no agent or provider ran. The packet is a manual review aid, not an approval.*
 
 ## Follow the work
 
