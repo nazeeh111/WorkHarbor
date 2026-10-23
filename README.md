@@ -19,6 +19,10 @@ WorkHarbor adapts the [Paperclip](https://github.com/paperclipai/paperclip) cont
 
 The screenshot shows the third step with a synthetic one-file packet. In this capture, `verify` and `check-current` passed initially; after another edit, `check-current` rejected the changed file. [Commands and boundaries](doc/workharbor-change-packets.md) explain how to reproduce that flow. A packet does not automatically approve, publish, deploy, or invalidate a native WorkHarbor decision.
 
+## Try a packet before installing the app
+
+The selected-file helper needs only Node.js 24 and Git. It can capture and verify a disposable change without pnpm, Rust, a database or a provider. [Run the short packet walkthrough](doc/workharbor-packet-walkthrough.md), then use the app when you want to attach that evidence to a task. The walkthrough also shows how a later edit makes the packet stale.
+
 ## Local setup
 
 The local launcher supports macOS and Linux from a regular clone or source archive. It rejects linked Git worktrees to avoid loading their separate instance configuration. Windows launcher support is not yet available. The source requires Node.js 24.11 or later, pnpm 9.15.4, and Rust for its native runner. Dependencies are pinned in `pnpm-lock.yaml` and `Cargo.lock`.
