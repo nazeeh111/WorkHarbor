@@ -717,7 +717,7 @@ function OnboardingWizardInner({
   // either, because it is not set until the request it guards has resolved. A
   // ref is written before the request goes out, so the second caller sees it.
   const creatingCompanyRef = useRef(false);
-  // Same shape for the hire. Greptile (round-3 PR): with "Test now" gone the
+  // Same shape for the hire. With "Test now" gone the
   // Connect handler re-runs a cached failed probe — and two overlapping
   // submissions could then both pass the fresh probe and both hire. `loading`
   // cannot stop the second caller for the same reason as above.
