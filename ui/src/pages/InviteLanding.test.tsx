@@ -129,6 +129,52 @@ describe("InviteLandingPage", () => {
     vi.clearAllMocks();
   });
 
+  it("waits for a pending invite before auto-accepting a signed-in user's request", async () => {
+    let resolveInvite: (value: Record<string, unknown>) => void = () => {};
+    getInviteMock.mockReturnValueOnce(new Promise<Record<string, unknown>>((resolve) => {
+      resolveInvite = resolve;
+    }));
+    getSessionMock.mockResolvedValue({
+      session: { id: "session-1", userId: "user-1" },
+      user: { id: "user-1", name: "Jane Example", email: "jane@example.com", image: null },
+      sentryDsn: null,
+    });
+    acceptInviteMock.mockResolvedValue({
+      id: "join-1", companyId: "company-1", requestType: "human", status: "pending_approval",
+    });
+    const root = createRoot(container);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    try {
+      await act(async () => {
+        root.render(
+          <MemoryRouter initialEntries={["/invite/pcp_invite_test"]}>
+            <QueryClientProvider client={queryClient}>
+              <Routes>
+                <Route path="/invite/:token" element={<InviteLandingPage />} />
+              </Routes>
+            </QueryClientProvider>
+          </MemoryRouter>,
+        );
+      });
+      await flushReact();
+      await flushReact();
+      expect(container.textContent).toContain("Loading invite...");
+      expect(acceptInviteMock).not.toHaveBeenCalled();
+
+      await act(async () => resolveInvite({
+        id: "invite-1", companyId: "company-1", companyName: "Acme Robotics",
+        companyLogoUrl: null, inviteType: "company_join", allowedJoinTypes: "human",
+        humanRole: "operator", expiresAt: "2027-03-07T00:10:00.000Z", inviteMessage: null,
+      }));
+      await vi.waitFor(() => expect(acceptInviteMock).toHaveBeenCalledOnce());
+      expect(acceptInviteMock).toHaveBeenCalledWith("pcp_invite_test", { requestType: "human" });
+      expect(container.textContent).not.toContain("Invite not found");
+    } finally {
+      await act(async () => root.unmount());
+      queryClient.clear();
+    }
+  });
+
   it("keeps agent-invite onboarding on legacy adapters", async () => {
     getInviteMock.mockResolvedValue({
       id: "invite-1",

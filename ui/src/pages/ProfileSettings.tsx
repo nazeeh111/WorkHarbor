@@ -42,12 +42,15 @@ export function ProfileSettings() {
     ]);
   }, [setBreadcrumbs]);
 
+  const sessionUserId = sessionQuery.data?.user.id;
+  const sessionUserName = sessionQuery.data?.user.name;
+  const sessionUserImage = sessionQuery.data?.user.image;
   useEffect(() => {
-    const session = sessionQuery.data;
-    if (!session) return;
-    setName(session.user.name ?? "");
-    setImage(session.user.image ?? "");
-  }, [sessionQuery.data]);
+    if (sessionUserId === undefined) return;
+    setName(sessionUserName ?? "");
+    setImage(sessionUserImage ?? "");
+    // Session-only metadata refreshes must not overwrite an unsaved profile.
+  }, [sessionUserId, sessionUserName, sessionUserImage]);
 
   function syncSessionProfile(profile: CurrentUserProfile) {
     queryClient.setQueryData<AuthSession | null>(queryKeys.auth.session, (current) => {

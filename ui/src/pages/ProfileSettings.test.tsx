@@ -4,7 +4,8 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sanitizeAssetNamespace } from "@paperclipai/shared";
+import { sanitizeAssetNamespace, type AuthSession } from "@paperclipai/shared";
+import { queryKeys } from "../lib/queryKeys";
 import { ProfileSettings } from "./ProfileSettings";
 
 const mockAuthApi = vi.hoisted(() => ({
@@ -86,6 +87,57 @@ describe("ProfileSettings", () => {
     container.remove();
     document.body.innerHTML = "";
     vi.clearAllMocks();
+  });
+
+  it("keeps an edited name across session-only refreshes and resets for a new account", async () => {
+    const root = createRoot(container);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    const session: AuthSession = {
+      session: { id: "session-1", userId: "user-1" },
+      user: { id: "user-1", name: "Jane Example", email: "jane@example.com", image: null },
+      sentryDsn: null,
+    };
+    queryClient.setQueryData(queryKeys.auth.session, session);
+    try {
+      await act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <ProfileSettings />
+          </QueryClientProvider>,
+        );
+      });
+      await flushReact();
+      const input = container.querySelector<HTMLInputElement>("#profile-name")!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Unsaved name");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(input.value).toBe("Unsaved name");
+
+      await act(async () => {
+        queryClient.setQueryData(queryKeys.auth.session, {
+          ...session,
+          sentryDsn: "https://monitoring.example.test/fixture",
+        });
+      });
+      await flushReact();
+      expect(input.value).toBe("Unsaved name");
+
+      await act(async () => {
+        queryClient.setQueryData(queryKeys.auth.session, {
+          ...session,
+          session: { id: "session-2", userId: "user-2" },
+          user: { ...session.user, id: "user-2", name: "Next account" },
+        });
+      });
+      await flushReact();
+      expect(input.value).toBe("Next account");
+    } finally {
+      await act(async () => root.unmount());
+      queryClient.clear();
+    }
   });
 
   it("uploads a clicked avatar into Paperclip storage and persists the returned asset path", async () => {
