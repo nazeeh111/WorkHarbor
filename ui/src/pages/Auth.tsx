@@ -54,10 +54,9 @@ export function AuthPage() {
       setError(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
       await queryClient.invalidateQueries({ queryKey: queryKeys.health });
-      // Reset rather than invalidate: the `["companies"]` entry is shared app-wide and
-      // is not account-scoped, so invalidating leaves the previous account's list
-      // readable (and any fetch for that session in flight) until the refetch lands.
-      // Sign-in can change accounts, so drop the list outright.
+      // Reset the company-query prefix after an account change. Lists are keyed
+      // by account; related company details and stats also live under this prefix.
+      // Reset clears their prior values and notifies mounted observers.
       await queryClient.resetQueries({ queryKey: queryKeys.companies.all });
       navigate(nextPath, { replace: true });
     },

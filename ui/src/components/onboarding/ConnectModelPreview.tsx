@@ -16,23 +16,10 @@ import { SleepingZs } from "./SleepingZs";
 import { Stepper } from "./Stepper";
 
 /**
- * A prototype of the connect step, from the PCLP-Onboarding file (nodes
- * 2941:8291 and 2933:4592).
- *
- * A mock, not the shipped step. The wizard's real step 4 puts two adapter cards
- * over an advanced-settings disclosure and probes the environment before
- * hiring; none of that is wired up here. What is here is the part the design is
- * actually asking a question about — how the row of sources reads as you point
- * at it, pick one, and flip the whole row between subscription and API
- * credentials — so it can be judged before any of that machinery is moved.
- *
- * It lives in `components/` rather than beside a story because two surfaces
- * render it: the Storybook stories, and the standalone
- * `connect-model-preview.html` entry that gets deployed for review. A copy in
- * each would have drifted the moment one was tweaked.
- *
- * Nothing here reaches a backend, and it needs none of the app's providers —
- * every piece it composes is presentational.
+ * Connect-step prototype from PCLP-Onboarding (nodes 2941:8291 and 2933:4592),
+ * shared by Storybook and the standalone review entry.
+ * Source selection and credential mode stay local; the production
+ * wizard owns sign-in, environment checks and agent creation.
  */
 
 /**

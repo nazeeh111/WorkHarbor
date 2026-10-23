@@ -461,12 +461,8 @@ export function InlineEditor({
     );
   }
 
-  // Use div instead of Tag when rendering markdown to avoid invalid nesting
-  // (e.g. <p> cannot contain the <div>/<p> elements that markdown produces)
-  const DisplayTag = value && multiline ? "div" : Tag;
-
   return (
-    <DisplayTag
+    <Tag
       className={cn(
         "cursor-pointer rounded hover:bg-accent/50 transition-colors overflow-hidden",
         pad,
@@ -476,6 +472,6 @@ export function InlineEditor({
       onClick={() => setEditing(true)}
     >
       {value || placeholder}
-    </DisplayTag>
+    </Tag>
   );
 }

@@ -1,11 +1,6 @@
 import { AGENT_ROLE_LABELS, type AgentRole } from "@paperclipai/shared";
 
 /**
- * The name the wizard offers before the customer picks a role. It is a job
- * title rather than a role label because it reads as a person on the very
- * first screen where the agent appears.
- */
-/**
  * The role every onboarding hire is filed under.
  *
  * The arc asks for a name, not a role: someone naming their first agent is
@@ -16,6 +11,7 @@ import { AGENT_ROLE_LABELS, type AgentRole } from "@paperclipai/shared";
  */
 export const DEFAULT_AGENT_ROLE = "general" as const;
 
+/** Default name recognized by the role-based name helper. */
 export const DEFAULT_AGENT_NAME = "Chief of staff";
 
 /**
