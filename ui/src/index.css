@@ -87,7 +87,7 @@
   --accent: oklch(0.93 0.022 178);
   --accent-foreground: var(--foreground);
   --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.89 0.015 175);
   --input: var(--border);
   --ring: oklch(0.48 0.075 185);
@@ -2752,9 +2752,9 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
   --gtc-28: 13rem minmax(0,1fr); /* Extracted from ui/src/pages/CompanySkills.tsx (grid-cols-[13rem_minmax(0,1fr)]). */
   --gtc-29: minmax(0,1fr) 18rem; /* Extracted from ui/src/pages/CompanySkills.tsx (grid-cols-[minmax(0,1fr)_18rem]). */
   --gtc-30: 14rem minmax(0,1fr); /* Extracted from ui/src/pages/CompanySkills.tsx (grid-cols-[14rem_minmax(0,1fr)]). */
-  --gtc-31: 1.3fr,1fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.3fr,1fr]). */
-  --gtc-32: 1.25fr,0.95fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.25fr,0.95fr]). */
-  --gtc-33: 1.2fr,0.95fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.2fr,0.95fr]). */
+  --gtc-31: 1.3fr 1fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.3fr,1fr]). */
+  --gtc-32: 1.25fr 0.95fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.25fr,0.95fr]). */
+  --gtc-33: 1.2fr 0.95fr; /* Extracted from ui/src/pages/Costs.tsx (grid-cols-[1.2fr,0.95fr]). */
   --gtc-34: 320px minmax(0,1fr); /* Extracted from ui/src/pages/InstanceAccess.tsx (grid-cols-[320px_minmax(0,1fr)]). */
   --gtc-35: minmax(10rem,14rem) 1fr; /* Extracted from ui/src/pages/InstanceExperimentalSettings.tsx (grid-cols-[minmax(10rem,14rem)_1fr]). */
   --gtc-36: minmax(0,1.15fr) minmax(360px,0.85fr); /* Extracted from ui/src/pages/InviteLanding.tsx (grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]). */
