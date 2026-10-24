@@ -73,6 +73,11 @@ jobs:
         run: >-
           pnpm --filter @paperclipai/server exec node --import tsx --input-type=module -e
           'const { getEmbeddedPostgresTestSupport } = await import("./src/__tests__/helpers/embedded-postgres.ts"); const support = await getEmbeddedPostgresTestSupport(); if (!support.supported) throw new Error(support.reason || "Embedded PostgreSQL unavailable");'
+      - name: Verify queued-comment locks and mutation contracts
+        run: >-
+          pnpm --filter @paperclipai/server exec vitest run
+          src/modules/wake-queue/adapters/queued-comment-postgres.test.ts
+          src/modules/wake-queue/application/queued-comment-use-cases.test.ts
       - name: Verify mocked run lifecycle without provider credentials
         run: pnpm --filter @paperclipai/server exec vitest run src/__tests__/heartbeat-stale-queue-invalidation.test.ts src/__tests__/native-session-resumption.test.ts src/__tests__/heartbeat-workspace-branch-containment.test.ts --reporter=default --reporter=json --outputFile=workharbor-lifecycle.json
       - name: Require all lifecycle tests to execute

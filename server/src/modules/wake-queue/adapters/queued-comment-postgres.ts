@@ -18,6 +18,7 @@ import type {
   QueuedCommentActivityLogInput,
   QueuedCommentActivityPublication,
   QueuedCommentIssueLockWriter,
+  QueuedCommentIssueContext,
   QueuedCommentQueueTransaction,
   QueuedCommentRunRow,
   QueuedCommentWakeRow,
@@ -43,7 +44,8 @@ export type QueuedCommentQueuePostgresAdapterDeps = {
   syncCommentExternalObjectsSafely(commentId: string, tx: Db): Promise<void>;
 };
 
-function buildTransaction(tx: Db, companyId: string, deps: QueuedCommentQueuePostgresAdapterDeps): QueuedCommentQueueTransaction {
+function buildTransaction(tx: Db, issue: QueuedCommentIssueContext, deps: QueuedCommentQueuePostgresAdapterDeps): QueuedCommentQueueTransaction {
+  const companyId = issue.companyId;
   return {
     async updateCommentBody({ issueId, commentId, body, updatedAt }) {
       const updated = await tx
@@ -112,7 +114,9 @@ function buildTransaction(tx: Db, companyId: string, deps: QueuedCommentQueuePos
         .where(and(eq(issues.id, issueId), eq(issues.companyId, companyId), eq(issues.executionRunId, executionRunId)));
     },
 
-    async buildQueueSnapshot({ issue, actor, wake, state, queueRun, activeRun }): Promise<IssueQueuedCommentQueue> {
+    // Rebuilds use the issue snapshot locked by this transaction too: callers
+    // may still hold the route's earlier assignee/execution context.
+    async buildQueueSnapshot({ actor, wake, state, queueRun, activeRun }): Promise<IssueQueuedCommentQueue> {
       const commentIds = queuedCommentIdsFromWakePayload(wake?.payload ?? null);
       const rows =
         commentIds.length > 0
@@ -209,11 +213,16 @@ export function createQueuedCommentIssueLockWriter(db: Db, deps: QueuedCommentQu
         const tx = rawTx as unknown as Db;
         const companyId = input.issue.companyId;
 
-        await tx
-          .select({ id: issues.id })
+        const issue = await tx
+          .select()
           .from(issues)
           .where(and(eq(issues.id, input.issue.id), eq(issues.companyId, companyId)))
-          .for("update");
+          .for("update")
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
+        if (!issue) {
+          throw new QueuedCommentMutationError("queued_comment_not_pending", "The queued message is no longer pending");
+        }
 
         const wakeRow = await tx
           .select()
@@ -222,7 +231,7 @@ export function createQueuedCommentIssueLockWriter(db: Db, deps: QueuedCommentQu
             and(
               eq(agentWakeupRequests.id, input.queueId),
               eq(agentWakeupRequests.companyId, companyId),
-              input.issue.assigneeAgentId ? eq(agentWakeupRequests.agentId, input.issue.assigneeAgentId) : undefined,
+              issue.assigneeAgentId ? eq(agentWakeupRequests.agentId, issue.assigneeAgentId) : undefined,
             ),
           )
           .for("update")
@@ -232,7 +241,7 @@ export function createQueuedCommentIssueLockWriter(db: Db, deps: QueuedCommentQu
         const wakePayload = parseObject(wakeRow?.payload);
         const lookup = decideQueuedCommentWakeLookup({
           wakePresent: wakeRow !== null,
-          wakeIssueIdMatches: readNonEmptyString(wakePayload.issueId) === input.issue.id,
+          wakeIssueIdMatches: readNonEmptyString(wakePayload.issueId) === issue.id,
           hasQueuedCommentIds: queuedCommentIdsFromWakePayload(wakeRow?.payload ?? null).length > 0,
           wakeStatus: wakeRow?.status ?? null,
           wakeHasRunId: Boolean(wakeRow?.runId),
@@ -278,7 +287,7 @@ export function createQueuedCommentIssueLockWriter(db: Db, deps: QueuedCommentQu
           state = "queued";
         }
 
-        const activeRunId = state === "deferred" ? input.issue.executionRunId : null;
+        const activeRunId = state === "deferred" ? issue.executionRunId : null;
         const activeRunRow = activeRunId
           ? await tx
               .select()
@@ -289,13 +298,13 @@ export function createQueuedCommentIssueLockWriter(db: Db, deps: QueuedCommentQu
               .then((rows) => rows[0] ?? null)
           : null;
 
-        const transaction = buildTransaction(tx, companyId, deps);
+        const transaction = buildTransaction(tx, issue, deps);
         const wake = toWakeRow(wakeRow);
         const queueRun = queueRunRow ? toRunRow(queueRunRow) : null;
         const activeRun = activeRunRow ? toRunRow(activeRunRow) : null;
 
         const queue = await transaction.buildQueueSnapshot({
-          issue: input.issue,
+          issue,
           actor: input.actor,
           wake,
           state,

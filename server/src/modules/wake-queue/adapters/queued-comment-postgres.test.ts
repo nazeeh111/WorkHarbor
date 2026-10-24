@@ -166,6 +166,80 @@ describeEmbeddedPostgres("queued-comment postgres adapter", () => {
     expect(wakeRow?.status).toBe("deferred_issue_execution");
   });
 
+  it("rejects a former assignee's queue after the issue was reassigned", async () => {
+    const companyId = await seedCompany();
+    const oldAgentId = await seedAgent({ companyId });
+    const newAgentId = await seedAgent({ companyId });
+    const issueId = await seedIssue({ companyId, assigneeAgentId: oldAgentId });
+    const commentId = await seedComment({ companyId, issueId, authorUserId: "user-1" });
+    const wakeId = await seedDeferredWake({ companyId, agentId: oldAgentId, issueId, commentIds: [commentId] });
+    const staleIssue = { id: issueId, companyId, assigneeAgentId: oldAgentId, executionRunId: null };
+    await db.update(issues).set({ assigneeAgentId: newAgentId }).where(eq(issues.id, issueId));
+    let entered = false;
+    await expect(createQueuedCommentIssueLockWriter(db, noopDeps).withLockedQueue({
+      issue: staleIssue,
+      actor: { actorType: "user", actorId: "user-1", agentId: null, runId: null, agentApiKeyId: null },
+      queueId: wakeId,
+    }, async () => { entered = true; })).rejects.toMatchObject({ code: "queued_comment_not_pending" });
+    expect(entered).toBe(false);
+    expect((await db.select().from(issueComments).where(eq(issueComments.id, commentId)))[0]?.body).toBe("queued message");
+  });
+
+  it("accepts the current assignee's queue and keeps rebuilds on the locked issue", async () => {
+    const companyId = await seedCompany();
+    const oldAgentId = await seedAgent({ companyId });
+    const newAgentId = await seedAgent({ companyId, adapterType: "paperclip_runner" });
+    const issueId = await seedIssue({ companyId, assigneeAgentId: oldAgentId });
+    const staleIssue = { id: issueId, companyId, assigneeAgentId: oldAgentId, executionRunId: null };
+    await db.update(issues).set({ assigneeAgentId: newAgentId }).where(eq(issues.id, issueId));
+    const commentId = await seedComment({ companyId, issueId, authorUserId: "user-1" });
+    const wakeId = await seedDeferredWake({ companyId, agentId: newAgentId, issueId, commentIds: [commentId] });
+    const actor = { actorType: "user" as const, actorId: "user-1", agentId: null, runId: null, agentApiKeyId: null };
+    const queue = await createQueuedCommentIssueLockWriter(db, noopDeps).withLockedQueue({ issue: staleIssue, actor, queueId: wakeId }, async (locked, transaction) => {
+      expect(locked.wake.agentId).toBe(newAgentId);
+      expect(locked.queue.protocol).toBe("paperclip_runner_v1");
+      await transaction.updateCommentBody({ issueId, commentId, body: "edited using current ownership", updatedAt: new Date() });
+      // The application retains its pre-lock issue argument when rebuilding.
+      return transaction.buildQueueSnapshot({ issue: staleIssue, actor, wake: locked.wake, state: locked.state, queueRun: locked.queueRun, activeRun: locked.activeRun });
+    });
+    expect(queue.protocol).toBe("paperclip_runner_v1");
+    expect(queue.entries[0]?.comment.body).toBe("edited using current ownership");
+    expect(staleIssue.assigneeAgentId).toBe(oldAgentId);
+  });
+
+  it("selects the current execution run instead of the route's earlier run", async () => {
+    const companyId = await seedCompany();
+    const agentId = await seedAgent({ companyId });
+    const issueId = await seedIssue({ companyId, assigneeAgentId: agentId });
+    const commentId = await seedComment({ companyId, issueId, authorUserId: "user-1" });
+    const wakeId = await seedDeferredWake({ companyId, agentId, issueId, commentIds: [commentId] });
+    const oldRunId = randomUUID(), newRunId = randomUUID();
+    await db.insert(heartbeatRuns).values([
+      { id: oldRunId, companyId, agentId, status: "running", runtimeMode: "legacy" },
+      { id: newRunId, companyId, agentId, status: "running", runtimeMode: "native" },
+    ]);
+    await db.update(issues).set({ executionRunId: newRunId }).where(eq(issues.id, issueId));
+    const queue = await createQueuedCommentIssueLockWriter(db, noopDeps).withLockedQueue({
+      issue: { id: issueId, companyId, assigneeAgentId: agentId, executionRunId: oldRunId },
+      actor: { actorType: "user", actorId: "user-1", agentId: null, runId: null, agentApiKeyId: null }, queueId: wakeId,
+    }, async (locked) => {
+      expect(locked.activeRun?.id).toBe(newRunId);
+      return locked.queue;
+    });
+    expect(queue.targetRunId).toBe(newRunId);
+    expect(queue.protocol).toBe("paperclip_runner_v1");
+  });
+
+  it("rejects a missing issue before looking up the queue", async () => {
+    const companyId = await seedCompany();
+    let entered = false;
+    await expect(createQueuedCommentIssueLockWriter(db, noopDeps).withLockedQueue({
+      issue: { id: randomUUID(), companyId, assigneeAgentId: null, executionRunId: null },
+      actor: { actorType: "user", actorId: "user-1", agentId: null, runId: null, agentApiKeyId: null }, queueId: randomUUID(),
+    }, async () => { entered = true; })).rejects.toMatchObject({ code: "queued_comment_not_pending" });
+    expect(entered).toBe(false);
+  });
+
   it("rolls back a discard when the comment id given belongs to a different issue than the one this transaction locked", async () => {
     const companyId = await seedCompany();
     const agentId = await seedAgent({ companyId });
