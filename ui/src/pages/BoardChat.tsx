@@ -223,6 +223,14 @@ export function BoardChat() {
   const [welcomeRevealed, setWelcomeRevealed] = useState(false);
   const [chipsRevealed, setChipsRevealed] = useState(false);
 
+  // Stop the old company's stream on company changes and unmount.
+  const streamControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => {
+    const controller = streamControllerRef.current;
+    streamControllerRef.current = null;
+    controller?.abort();
+  }, [selectedCompanyId]);
+
   // Reset state and clear cached comments when company changes. The
   // composer draft is NOT wiped — it's loaded from per-company
   // sessionStorage in the effect below so users don't lose typed content
@@ -236,6 +244,7 @@ export function BoardChat() {
       setBoardIssueId(null);
       setStreamingText("");
       setStatusText("");
+      setErrorText("");
       setSending(false);
       setOptimisticMessage(null);
       prevCompanyRef.current = selectedCompanyId;
@@ -558,9 +567,11 @@ export function BoardChat() {
       setErrorText("");
       setStatusText("Connecting...");
 
+      const controller = new AbortController();
+      streamControllerRef.current = controller;
+      const isCurrentStream = () => streamControllerRef.current === controller;
+      const fetchTimeout = setTimeout(() => controller.abort(), 130000);
       try {
-        const controller = new AbortController();
-        const fetchTimeout = setTimeout(() => controller.abort(), 130000);
         const res = await fetch("/api/board/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -572,6 +583,7 @@ export function BoardChat() {
           signal: controller.signal,
         });
         clearTimeout(fetchTimeout);
+        if (!isCurrentStream()) return;
 
         if (!res.ok || !res.body) {
           throw new Error("Board chat stream not available");
@@ -586,6 +598,7 @@ export function BoardChat() {
 
         while (true) {
           const { done, value } = await reader.read();
+          if (!isCurrentStream()) return;
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -632,14 +645,19 @@ export function BoardChat() {
           queryClient.invalidateQueries({ queryKey: queryKeys.issues.comments(boardIssueId) });
         }
       } catch (err) {
+        if (!isCurrentStream()) return;
         console.error("Board chat error:", err);
         setStatusText("");
         setErrorText(
           "The board assistant is unavailable right now. Please try again in a moment.",
         );
       } finally {
-        setSending(false);
-        composerRef.current?.focus();
+        clearTimeout(fetchTimeout);
+        if (isCurrentStream()) {
+          streamControllerRef.current = null;
+          setSending(false);
+          composerRef.current?.focus();
+        }
       }
     },
     [sending, selectedCompanyId, boardIssueId, queryClient],
