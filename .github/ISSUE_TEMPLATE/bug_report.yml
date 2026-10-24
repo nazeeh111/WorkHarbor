@@ -106,7 +106,7 @@ body:
     attributes:
       label: Database mode
       options:
-        - Embedded PGlite (default — `DATABASE_URL` unset)
+        - Embedded PostgreSQL
         - External Postgres
         - Not database-related
     validations:
