@@ -46,6 +46,8 @@ jobs:
           src/components/task-chat/TaskChatThreadView.performance.test.tsx
           src/components/task-chat/TaskMessageScroller.test.tsx
           src/components/task-chat/TaskChatComposer.test.tsx
+          src/components/task-chat/task-chat-attachments.test.ts
+          src/components/task-chat/TaskChatBubble.test.tsx
           src/lib/sentry.test.ts src/lib/sentry-package-version.test.ts
           src/components/SentryGate.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck

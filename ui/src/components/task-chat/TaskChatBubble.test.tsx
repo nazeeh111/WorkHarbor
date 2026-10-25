@@ -85,6 +85,88 @@ describe("TaskChatBubble attachment chips", () => {
     expect(container.textContent).not.toContain("(/api/attachments/abc/content)");
   });
 
+  it("keeps fenced attachment examples and blank lines in the rendered code", () => {
+    const literal = "[sample.txt](/api/attachments/sample/content)\n\n\n![sample](/api/attachments/sample-image/content)";
+    renderMessage(`\`\`\`markdown\n${literal}\n\`\`\``, "agent");
+    expect(container.querySelector("pre code")?.textContent).toBe(`${literal}\n`);
+    expect(container.querySelector('[data-testid="task-chat-bubble-attachments"]')).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("renders an indented code block and still promotes a real file after it", () => {
+    renderMessage("    console.log(\"preserve code\");\n\n[notes.txt](/api/attachments/notes/content)", "agent");
+    expect(container.querySelector("pre code")?.textContent).toBe('console.log("preserve code");\n');
+    expect(container.querySelector('[data-testid="task-chat-bubble-attachments"]')?.textContent).toContain("notes.txt");
+  });
+
+  it.each([
+  {
+    "name": "list-exit-file",
+    "body": "- ```\n  literal\n\n[real.txt](/api/attachments/real/content)",
+    "codes": [
+      "literal\n"
+    ],
+    "file": "real.txt",
+    "images": 0
+  },
+  {
+    "name": "list-exit-root-fence",
+    "body": "- ```\n  inner\n\n```\n[example.txt](/api/attachments/example/content)\n```",
+    "codes": [
+      "inner\n",
+      "[example.txt](/api/attachments/example/content)\n"
+    ],
+    "file": null,
+    "images": 0
+  },
+  {
+    "name": "list-exit-image",
+    "body": "- ~~~\n  literal\n\n![real](/api/attachments/real/content)",
+    "codes": [
+      "literal\n"
+    ],
+    "file": null,
+    "images": 1
+  },
+  {
+    "name": "block-inline-boundary",
+    "body": "` unclosed\n# Heading\n[real.txt](/api/attachments/real/content)\n`",
+    "codes": [],
+    "file": "real.txt",
+    "images": 0
+  },
+  {
+    "name": "heading-to-indented-code",
+    "body": "# Heading\n    [example.txt](/api/attachments/example/content)",
+    "codes": [
+      "[example.txt](/api/attachments/example/content)\n"
+    ],
+    "file": null,
+    "images": 0
+  }
+])("renders code and attachment affordances at $name", ({ body, codes, file, images }) => {
+    renderMessage(body, "agent");
+    expect(Array.from(container.querySelectorAll("pre code"), (code) => code.textContent)).toEqual(codes);
+    const group = container.querySelector('[data-testid="task-chat-bubble-attachments"]');
+    if (file) expect(group?.textContent).toContain(file);
+    else expect(group).toBeNull();
+    expect(container.querySelectorAll("img")).toHaveLength(images);
+  });
+
+  it.each([
+    "[real.txt](/api/attachments/real/content)",
+    "![real](/api/attachments/real/content)",
+  ])("keeps indented continuation text in prose after %s", (reference) => {
+    renderMessage(`${reference}\n    ordinary prose continuation`, "agent");
+    expect(container.querySelector("pre")).toBeNull();
+    expect(container.querySelector("p")?.textContent).toContain("ordinary prose continuation");
+    if (reference.startsWith("!")) {
+      expect(container.querySelectorAll("p img")).toHaveLength(1);
+    } else {
+      expect(container.querySelector("p a")?.getAttribute("href")).toBe("/api/attachments/real/content");
+    }
+  });
+
   it("renders a chip-only row when the message body is just the file link", () => {
     renderMessage("[report.pdf](/api/attachments/r1/content)", "agent");
 

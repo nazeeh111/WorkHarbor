@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractAttachmentRefs,
+  extractMessageAttachmentRefs,
   extractImageRefs,
   fileKindForAttachment,
   fileKindForName,
@@ -202,5 +203,187 @@ describe("stripStandaloneImageEmbeds", () => {
     expect(
       stripStandaloneImageEmbeds("Done.\n\n![desktop Default](/api/attachments/a/content)"),
     ).toBe("Done.");
+  });
+});
+
+describe("literal code and attachment promotion", () => {
+  const literalBodies = [
+    "```markdown\n![example](/api/attachments/example/content)\n[example.txt](/api/attachments/example/content)\n```",
+    "~~~markdown\n![example](/api/attachments/example/content)\n~~~",
+    "````markdown\n```\n[example.txt](/api/attachments/example/content)\n````",
+    "```markdown\n[example.txt](/api/attachments/example/content)",
+    "    [example.txt](/api/attachments/example/content)\n\n    next line",
+    "\t![example](/api/attachments/example/content)",
+    "`[example.txt](/api/attachments/example/content)`",
+    "``literal ` [example.txt](/api/attachments/example/content)``",
+    "`first\n![example](/api/attachments/example/content)\nlast`",
+    "> ```markdown\n> [example.txt](/api/attachments/example/content)\n> ```",
+    "- ```markdown\n  [example.txt](/api/attachments/example/content)\n  ```",
+    "```markdown\r\n[example.txt](/api/attachments/example/content)\r\n```",
+    "    console.log(\"keep indentation\");",
+    "```text\nfirst\n\n\nsecond\n```",
+    "\n\n    leading and trailing whitespace\n\n",
+  ];
+
+  it.each(literalBodies)("preserves literal code bytes: %s", (body) => {
+    const files = extractAttachmentRefs(body);
+    expect(files).toEqual({ refs: [], text: body });
+    expect(extractImageRefs(files.text)).toEqual([]);
+    expect(stripStandaloneImageEmbeds(files.text)).toBe(body);
+  });
+
+  it("promotes real attachments outside code while preserving the code content", () => {
+    const code = "```markdown\n[example.txt](/api/attachments/example/content)\n\n\n![sample](/api/attachments/sample/content)\n```";
+    const body = `${code}\n\n[notes.txt](/api/attachments/notes/content)\n\n![proof](/api/attachments/proof/content)`;
+    const files = extractAttachmentRefs(body);
+    expect(files.refs).toEqual([{ name: "notes.txt", url: "/api/attachments/notes/content" }]);
+    expect(extractImageRefs(files.text)).toEqual([{ name: "proof", url: "/api/attachments/proof/content" }]);
+    expect(stripStandaloneImageEmbeds(files.text)).toBe(code);
+  });
+
+  it("keeps multiline prose-link extraction without rewriting its body", () => {
+    const body = "See [notes\nfile](/api/attachments/notes/content) here.";
+    expect(extractAttachmentRefs(body)).toEqual({
+      refs: [{ name: "notes\nfile", url: "/api/attachments/notes/content" }],
+      text: body,
+    });
+  });
+
+  it("leaves escaped links literal and recognizes an unmatched backtick as prose", () => {
+    const escaped = String.raw`\[example.txt](/api/attachments/example/content)`;
+    expect(extractAttachmentRefs(escaped)).toEqual({ refs: [], text: escaped });
+    expect(extractAttachmentRefs("` See [notes.txt](/api/attachments/notes/content)").refs)
+      .toEqual([{ name: "notes.txt", url: "/api/attachments/notes/content" }]);
+  });
+});
+
+describe("attachment promotion at Markdown block boundaries", () => {
+  const cases = [
+  {
+    "name": "list-exit-file",
+    "body": "- ```\n  literal\n\n[real.txt](/api/attachments/real/content)",
+    "expected": {
+      "refs": [
+        {
+          "name": "real.txt",
+          "url": "/api/attachments/real/content"
+        }
+      ],
+      "imageRefs": [],
+      "text": "- ```\n  literal"
+    }
+  },
+  {
+    "name": "list-exit-root-fence",
+    "body": "- ```\n  inner\n\n```\n[example.txt](/api/attachments/example/content)\n```",
+    "expected": {
+      "refs": [],
+      "imageRefs": [],
+      "text": "- ```\n  inner\n\n```\n[example.txt](/api/attachments/example/content)\n```"
+    }
+  },
+  {
+    "name": "quote-exit-control",
+    "body": "> ```\n> literal\n\n[real.txt](/api/attachments/real/content)",
+    "expected": {
+      "refs": [
+        {
+          "name": "real.txt",
+          "url": "/api/attachments/real/content"
+        }
+      ],
+      "imageRefs": [],
+      "text": "> ```\n> literal"
+    }
+  },
+  {
+    "name": "normal-mixed-control",
+    "body": "```text\n[example.txt](/api/attachments/example/content)\n```\n\n[real.txt](/api/attachments/real/content)",
+    "expected": {
+      "refs": [
+        {
+          "name": "real.txt",
+          "url": "/api/attachments/real/content"
+        }
+      ],
+      "imageRefs": [],
+      "text": "```text\n[example.txt](/api/attachments/example/content)\n```"
+    }
+  },
+  {
+    "name": "list-exit-image",
+    "body": "- ~~~\n  literal\n\n![real](/api/attachments/real/content)",
+    "expected": {
+      "refs": [],
+      "imageRefs": [
+        {
+          "name": "real",
+          "url": "/api/attachments/real/content"
+        }
+      ],
+      "text": "- ~~~\n  literal"
+    }
+  },
+  {
+    "name": "block-inline-boundary",
+    "body": "` unclosed\n# Heading\n[real.txt](/api/attachments/real/content)\n`",
+    "expected": {
+      "refs": [
+        {
+          "name": "real.txt",
+          "url": "/api/attachments/real/content"
+        }
+      ],
+      "imageRefs": [],
+      "text": "` unclosed\n# Heading\n\n`"
+    }
+  },
+  {
+    "name": "heading-to-indented-code",
+    "body": "# Heading\n    [example.txt](/api/attachments/example/content)",
+    "expected": {
+      "refs": [],
+      "imageRefs": [],
+      "text": "# Heading\n    [example.txt](/api/attachments/example/content)"
+    }
+  },
+  {
+    "name": "blockquote-blank",
+    "body": "> ```\n\n> [literal](/api/attachments/literal/content)\n> ```",
+    "expected": {
+      "refs": [
+        {
+          "name": "literal",
+          "url": "/api/attachments/literal/content"
+        }
+      ],
+      "imageRefs": [],
+      "text": "> ```\n\n> [literal](/api/attachments/literal/content)\n> ```"
+    }
+  }
+];
+
+  it.each(cases)("$name", ({ body, expected }) => {
+    expect(extractMessageAttachmentRefs(body)).toEqual(expected);
+    const files = extractAttachmentRefs(body);
+    expect(files.refs).toEqual(expected.refs);
+    expect(extractImageRefs(files.text)).toEqual(expected.imageRefs);
+    expect(stripStandaloneImageEmbeds(files.text)).toBe(expected.text);
+  });
+});
+
+describe("leading attachments in a prose paragraph", () => {
+  it("keeps the link that anchors an indented prose continuation", () => {
+    const body = "[real.txt](/api/attachments/real/content)\n    ordinary prose continuation";
+    const expected = { refs: [{ name: "real.txt", url: "/api/attachments/real/content" }], imageRefs: [], text: body };
+    expect(extractMessageAttachmentRefs(body)).toEqual(expected);
+    expect(extractAttachmentRefs(body)).toEqual({ refs: expected.refs, text: body });
+  });
+
+  it("keeps an image inline when it anchors an indented prose continuation", () => {
+    const body = "![real](/api/attachments/real/content)\n    ordinary prose continuation";
+    expect(extractMessageAttachmentRefs(body)).toEqual({ refs: [], imageRefs: [], text: body });
+    expect(extractImageRefs(body)).toEqual([]);
+    expect(stripStandaloneImageEmbeds(body)).toBe(body);
   });
 });

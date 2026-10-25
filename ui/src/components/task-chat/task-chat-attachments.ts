@@ -5,6 +5,8 @@
  * ("[name](/api/attachments/<id>/content)") so posted bubbles can render them
  * as the same chips instead of bare links.
  */
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   FileArchive,
   FileAudio,
@@ -202,41 +204,119 @@ const ATTACHMENT_LINK_RE =
 /** Markdown image embeds (`![name](url)`), same escaped-label grammar. */
 const IMAGE_EMBED_RE = /!\[((?:\\.|[^\]\\])*)\]\(([^()\s]+)\)/g;
 
-function isStandaloneImageEmbedLine(line: string): boolean {
-  return (
-    line.replace(IMAGE_EMBED_RE, "").trim().length === 0 && line.trim().length > 0
-  );
+type MarkdownNode = {
+  type: string;
+  children?: MarkdownNode[];
+  position?: { start: { offset?: number; line?: number }; end: { offset?: number; line?: number } };
+};
+
+/** Read code and paragraph ranges through MarkdownBody's synchronous remark/GFM parser. */
+function attachmentMarkdownContext(body: string) {
+  const mask = new Uint8Array(body.length);
+  const paragraphs: Array<[number, number]> = [];
+  Markdown({
+    children: body,
+    remarkPlugins: [remarkGfm, () => (tree: MarkdownNode) => {
+      const visit = (node: MarkdownNode) => {
+        if (node.type === "paragraph") {
+          const start = node.position?.start.line;
+          const end = node.position?.end.line;
+          if (start !== undefined && end !== undefined) paragraphs.push([start - 1, end - 1]);
+        }
+        if (node.type === "code" || node.type === "inlineCode") {
+          const start = node.position?.start.offset;
+          const end = node.position?.end.offset;
+          if (start !== undefined && end !== undefined) mask.fill(1, start, end);
+        } else node.children?.forEach(visit);
+      };
+      visit(tree);
+      // We need source positions only, not a second rendered element tree.
+      tree.children = [];
+    }],
+  });
+  return { mask, paragraphs };
 }
 
-/**
- * Images on standalone lines, in document order, deduped by URL. Images woven
- * into prose stay inline so they are not also duplicated in the media strip.
- * Feeds the bubble's lightbox: the refs become the gallery items and the
- * clicked <img> src picks the initial index.
- */
-export function extractImageRefs(body: string): AttachmentRef[] {
+function visibleMatches(line: string, pattern: RegExp, mask: Uint8Array, offset: number) {
+  return Array.from(line.matchAll(pattern)).filter((match) => {
+    if (mask[offset + match.index]) return false;
+    let slashes = 0;
+    for (let i = match.index - 1; i >= 0 && line[i] === "\\"; i -= 1) slashes += 1;
+    return slashes % 2 === 0;
+  });
+}
+
+/** Remove only promoted lines and their adjacent separator blanks, never trim code. */
+function removePromotedLines(lines: string[], removed: boolean[]): string {
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!removed[i]) { kept.push(lines[i]); continue; }
+    while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
+    while (i + 1 < lines.length && (!lines[i + 1].trim() || removed[i + 1])) i += 1;
+    if (kept.length && i + 1 < lines.length) kept.push("");
+  }
+  return kept.join("\n");
+}
+
+function analyzeAttachmentRefs(body: string) {
+  const { mask, paragraphs } = body.includes("](")
+    ? attachmentMarkdownContext(body)
+    : { mask: new Uint8Array(0), paragraphs: [] };
   const refs: AttachmentRef[] = [];
+  const imageRefs: AttachmentRef[] = [];
   const seen = new Set<string>();
-  for (const line of body.split("\n")) {
-    if (!isStandaloneImageEmbedLine(line)) continue;
-    for (const match of line.matchAll(IMAGE_EMBED_RE)) {
-      const [, name, url] = match;
-      if (seen.has(url)) continue;
-      seen.add(url);
-      refs.push({ name: name.replace(/\\([[\]])/g, "$1"), url });
+  const seenImages = new Set<string>();
+  const lines = body.split("\n");
+  const fileLines: boolean[] = [];
+  const imageLines: boolean[] = [];
+  const imageMatches: RegExpMatchArray[][] = [];
+  for (const [, name, url] of visibleMatches(body, ATTACHMENT_LINK_RE, mask, 0)) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+    refs.push({ name: name.replace(/\\([[\]])/g, "$1"), url });
+  }
+  let offset = 0;
+  for (const line of lines) {
+    const files = visibleMatches(line, ATTACHMENT_LINK_RE, mask, offset);
+    const images = visibleMatches(line, IMAGE_EMBED_RE, mask, offset);
+    offset += line.length + 1;
+    const without = (matches: RegExpMatchArray[]) => matches.reduceRight((text, match) =>
+      text.slice(0, match.index!) + text.slice(match.index! + match[0].length), line);
+    fileLines.push(files.length > 0 && !without(files).trim());
+    const standaloneImages = images.length > 0 && !without(images).trim();
+    imageLines.push(standaloneImages);
+    imageMatches.push(images);
+  }
+  // A leading link can make following indented text a lazy paragraph
+  // continuation. Keep that context rather than turning the prose into code.
+  for (const [start, end] of paragraphs) {
+    let firstKept = start;
+    while (firstKept <= end && (fileLines[firstKept] || imageLines[firstKept])) firstKept += 1;
+    if (firstKept > start && firstKept <= end && /^(?: {4}| {0,3}\t)/.test(lines[firstKept])) {
+      for (let i = start; i < firstKept; i += 1) fileLines[i] = imageLines[i] = false;
     }
   }
-  return refs;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (imageLines[i]) {
+      for (const [, name, url] of imageMatches[i]) {
+        if (seenImages.has(url)) continue;
+        seenImages.add(url);
+        imageRefs.push({ name: name.replace(/\\([[\]])/g, "$1"), url });
+      }
+    }
+  }
+  return { refs, imageRefs, lines, fileLines, imageLines };
+}
+
+/** Images on standalone non-code lines, in document order, deduped by URL. */
+export function extractImageRefs(body: string): AttachmentRef[] {
+  return analyzeAttachmentRefs(body).imageRefs;
 }
 
 /** Remove standalone image-embed lines after promoting them to the media strip. */
 export function stripStandaloneImageEmbeds(body: string): string {
-  return body
-    .split("\n")
-    .filter((line) => !isStandaloneImageEmbedLine(line))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const { lines, imageLines } = analyzeAttachmentRefs(body);
+  return removePromotedLines(lines, imageLines);
 }
 
 export interface ExtractedAttachmentRefs {
@@ -245,33 +325,18 @@ export interface ExtractedAttachmentRefs {
   text: string;
 }
 
-/**
- * Pull non-image attachment references out of a message body. Every matching
- * link becomes a chip; a line is stripped from the rendered body only when it
- * contains nothing but extracted links (the shape the composer inserts), so
- * links woven into prose keep their sentence.
- */
+/** Pull attachment links out of prose, retaining literal code and other bytes. */
 export function extractAttachmentRefs(body: string): ExtractedAttachmentRefs {
-  const refs: AttachmentRef[] = [];
-  const seen = new Set<string>();
-  for (const match of body.matchAll(ATTACHMENT_LINK_RE)) {
-    const [, name, url] = match;
-    if (seen.has(url)) continue;
-    seen.add(url);
-    refs.push({ name: name.replace(/\\([[\]])/g, "$1"), url });
-  }
-  if (refs.length === 0) return { refs, text: body };
+  const { refs, lines, fileLines } = analyzeAttachmentRefs(body);
+  return { refs, text: removePromotedLines(lines, fileLines) };
+}
 
-  const kept = body.split("\n").filter((line) => {
-    const withoutLinks = line.replace(ATTACHMENT_LINK_RE, (full, name: string, url: string) => {
-      return seen.has(url) ? "" : full;
-    });
-    return withoutLinks.trim().length > 0 || line.trim().length === 0;
-  });
-  // Collapse the blank run left behind where a link-only line was removed.
-  const text = kept
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return { refs, text };
+/** The bubble classifies the original body once, before removing any lines. */
+export function extractMessageAttachmentRefs(body: string) {
+  const { refs, imageRefs, lines, fileLines, imageLines } = analyzeAttachmentRefs(body);
+  return {
+    refs,
+    imageRefs,
+    text: removePromotedLines(lines, fileLines.map((file, index) => file || imageLines[index])),
+  };
 }

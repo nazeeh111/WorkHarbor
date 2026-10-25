@@ -1,4 +1,4 @@
-import { useCallback, useContext, useState, type ReactNode } from "react";
+import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { useEmailComment } from "@/components/EmailMessageCard";
 import type { IssueAttachment } from "@paperclipai/shared";
 import { IssueGalleryContext } from "@/context/IssueGalleryContext";
@@ -21,13 +21,11 @@ import {
   AttachmentTrigger,
 } from "@/components/ui/attachment";
 import {
-  extractAttachmentRefs,
-  extractImageRefs,
+  extractMessageAttachmentRefs,
   fileKindForAttachment,
   formatFileSize,
   hydrateAttachmentRefs,
   isImageAttachment,
-  stripStandaloneImageEmbeds,
   type AttachmentRef,
 } from "./task-chat-attachments";
 import { TaskChatSystemNotice } from "./TaskChatSystemNotice";
@@ -157,6 +155,13 @@ function TaskChatBubbleContent({
   const openImage = useCallback((src: string) => {
     if (!openIssueGallery?.(src)) setLightboxSrc(src);
   }, [openIssueGallery]);
+  // Keep parsing unchanged history out of live-tail rerenders, as MarkdownBody does.
+  const { refs: linkedRefs, imageRefs: embeddedImageRefs, text: bodyText } = useMemo(
+    () => item.interstitial || item.author === "system"
+      ? { refs: [], imageRefs: [], text: "" }
+      : extractMessageAttachmentRefs(item.text),
+    [item.text, item.interstitial, item.author],
+  );
   if (item.interstitial) {
     // Interstitial updates are ephemeral (PAP-361): while streaming the text
     // lives on the live parent row's line (TaskChatStatusItem.selfTalk), and
@@ -180,10 +185,6 @@ function TaskChatBubbleContent({
   const sentFromIMessage = isHuman && item.sourceChannel === "imessage-photon";
   // Non-image file references ("[name](/api/attachments/…/content)") render as
   // attachment chips under the bubble; link-only lines leave the body text.
-  const { refs: linkedRefs, text: bodyWithoutAttachmentLinks } =
-    extractAttachmentRefs(item.text);
-  const embeddedImageRefs = extractImageRefs(bodyWithoutAttachmentLinks);
-  const bodyText = stripStandaloneImageEmbeds(bodyWithoutAttachmentLinks);
   const hydratedLinkedRefs = hydrateAttachmentRefs(linkedRefs, attachments);
   const hydratedEmbeddedRefs = hydrateAttachmentRefs(
     embeddedImageRefs,
