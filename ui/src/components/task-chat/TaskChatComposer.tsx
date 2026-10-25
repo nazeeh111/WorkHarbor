@@ -419,6 +419,17 @@ export function TaskChatComposer({
   const stopControl = useComposerStop(onStop, stopPending);
   const [body, setBody] = useState(() => (draftKey ? loadDraft(draftKey) : ""));
   const [submitting, setSubmitting] = useState(false);
+  const [goalPending, setGoalPending] = useState(false);
+  const goalOperationRef = useRef<object | null>(null);
+  const draftEditVersion = useRef(0);
+  useEffect(() => {
+    // A late command must not own another task or a queued-message editor.
+    goalOperationRef.current = null;
+    setGoalPending(false);
+    return () => {
+      goalOperationRef.current = null;
+    };
+  }, [draftKey, queuedEdit?.commentId]);
   const [reviewError, setReviewError] = useState(false);
   const [uncertainSubmission, setUncertainSubmission] =
     useState<ComposerDraftSubmission | null>(() =>
@@ -484,6 +495,7 @@ export function TaskChatComposer({
     submittedAttachmentIds: string[];
   } | null>(null);
   function changeBody(value: string) {
+    draftEditVersion.current += 1;
     bodyRef.current = value;
     setBody(value);
     const pending = pendingDraftRef.current;
@@ -826,6 +838,7 @@ export function TaskChatComposer({
   const showStop =
     !queuedEdit &&
     !submitting &&
+    !goalPending &&
     body.trim().length === 0 &&
     attachments.length === 0 &&
     Boolean(onStop || stopControl.stopping);
@@ -845,7 +858,10 @@ export function TaskChatComposer({
   const canResetPausedConversation = conversationMode && !queuedEdit && body.trim() === "/new" && attachments.length === 0;
 
   async function submit() {
-    if (disabled || (pause && !canResetPausedConversation)) return;
+    if (
+      disabled || goalOperationRef.current || submitting || uncertainSubmission ||
+      (pause && !canResetPausedConversation)
+    ) return;
     const retained =
       draftKey && !queuedEdit ? loadDraftSubmission(draftKey) : null;
     if (retained && !submitting) {
@@ -889,6 +905,10 @@ export function TaskChatComposer({
         );
         return;
       }
+      const operation = {};
+      const submittedEditVersion = draftEditVersion.current;
+      goalOperationRef.current = operation;
+      setGoalPending(true);
       try {
         const hasReassignment =
           showAssignee && assigneeValue !== currentAssigneeValue;
@@ -899,10 +919,17 @@ export function TaskChatComposer({
             return;
           }
           await onRunnerGoalReassign(reassignment);
-          updatePendingAssignee(null);
+          if (goalOperationRef.current !== operation) return;
+          if (pendingAssigneeRef.current === submittedAssignee) {
+            updatePendingAssignee(null);
+          }
         }
         await onRunnerGoalCommand(goalCommand.command);
+        if (goalOperationRef.current !== operation) return;
         setActionError(null);
+        // The editor remains writable while the command is pending. Clear only
+        // the submitted draft, even if newer edits happen to have identical text.
+        if (draftEditVersion.current !== submittedEditVersion) return;
         bodyRef.current = "";
         if (draftTimer.current) clearTimeout(draftTimer.current);
         draftTimer.current = null;
@@ -910,11 +937,17 @@ export function TaskChatComposer({
         setBody("");
         editorRef.current?.clear();
       } catch (error) {
+        if (goalOperationRef.current !== operation) return;
         setActionError(
           error instanceof Error
             ? error.message
             : "The goal action could not be applied.",
         );
+      } finally {
+        if (goalOperationRef.current === operation) {
+          goalOperationRef.current = null;
+          setGoalPending(false);
+        }
       }
       return;
     }
@@ -1574,6 +1607,7 @@ export function TaskChatComposer({
                   : disabled ||
                     (Boolean(pause) && !canResetPausedConversation) ||
                     submitting ||
+                    goalPending ||
                     !!uncertainSubmission ||
                     uploadPending ||
                     uploadFailed ||
@@ -1588,11 +1622,13 @@ export function TaskChatComposer({
                     ? queuedEdit.stale
                       ? "Queue as new message"
                       : "Save queued message"
-                    : uploadPending
-                      ? "Waiting for upload to finish"
-                      : uploadFailed
-                        ? "Remove the failed attachment to send"
-                        : "Send (⌘+Enter)"
+                    : goalPending
+                      ? "Applying goal action…"
+                      : uploadPending
+                        ? "Waiting for upload to finish"
+                        : uploadFailed
+                          ? "Remove the failed attachment to send"
+                          : "Send (⌘+Enter)"
               }
               aria-label={
                 showStop
@@ -1616,7 +1652,7 @@ export function TaskChatComposer({
               }
               data-slot="icon-button"
             >
-              {submitting || (showStop && stopControl.stopping) ? (
+              {submitting || goalPending || (showStop && stopControl.stopping) ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               ) : showStop ? (
                 <Square className="h-4 w-4 fill-current" aria-hidden />

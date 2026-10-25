@@ -1396,6 +1396,90 @@ describe("TaskChatComposer", () => {
       expect(editable().textContent).toBe("");
     });
 
+    it("keeps newer typing durable while a goal is pending and excludes repeat sends", async () => {
+      let resolveGoal!: () => void;
+      const onAdd = vi.fn();
+      const onRunnerGoalCommand = vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => { resolveGoal = resolve; }),
+      );
+      const key = "pending-goal-draft";
+      render(<TaskChatComposer onAdd={onAdd} workMode="standard" draftKey={key}
+        runnerGoalCapability={capability} onRunnerGoalCommand={onRunnerGoalCommand} />);
+      typeText("/goal Ship the feature");
+      pressKey("Enter", { metaKey: true });
+      pressKey("Enter", { metaKey: true });
+      expect(onRunnerGoalCommand).toHaveBeenCalledTimes(1);
+      expect(sendButton().disabled).toBe(true);
+      expect(sendButton().title).toBe("Applying goal action…");
+      typeText("My next draft");
+      pressKey("Enter", { metaKey: true });
+      expect(onAdd).not.toHaveBeenCalled();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_DEBOUNCE_MS + 20));
+      });
+      expect(localStorage.getItem(key)).toBe("My next draft");
+      resolveGoal();
+      await flushAsync();
+      expect(editable().textContent).toBe("My next draft");
+      expect(localStorage.getItem(key)).toBe("My next draft");
+      expect(sendButton().disabled).toBe(false);
+    });
+
+    it("preserves edits even when they return to the submitted goal text", async () => {
+      let resolveGoal!: () => void;
+      const onRunnerGoalCommand = vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => { resolveGoal = resolve; }),
+      );
+      render(<TaskChatComposer onAdd={vi.fn()} workMode="standard"
+        runnerGoalCapability={capability} onRunnerGoalCommand={onRunnerGoalCommand} />);
+      typeText("/goal Ship the feature");
+      pressKey("Enter", { metaKey: true });
+      typeText("replacement");
+      typeText("/goal Ship the feature");
+      resolveGoal();
+      await flushAsync();
+      expect(editable().textContent).toBe("/goal Ship the feature");
+    });
+
+    it("ignores old goal completion after leaving and returning to a task", async () => {
+      let resolveGoal!: () => void;
+      const onRunnerGoalCommand = vi.fn().mockReturnValue(
+        new Promise<void>((resolve) => { resolveGoal = resolve; }),
+      );
+      const composer = (draftKey: string) => <TaskChatComposer onAdd={vi.fn()}
+        workMode="standard" draftKey={draftKey} runnerGoalCapability={capability}
+        onRunnerGoalCommand={onRunnerGoalCommand} />;
+      render(composer("goal-task-A"));
+      typeText("/goal Ship the feature");
+      pressKey("Enter", { metaKey: true });
+      render(composer("goal-task-B"));
+      typeText("Task B draft");
+      render(composer("goal-task-A"));
+      typeText("Task A replacement");
+      resolveGoal();
+      await flushAsync();
+      expect(editable().textContent).toBe("Task A replacement");
+      expect(sendButton().disabled).toBe(false);
+    });
+
+    it("retains the goal command and releases pending state on rejection", async () => {
+      let rejectGoal!: (error: Error) => void;
+      const onRunnerGoalCommand = vi.fn().mockReturnValue(
+        new Promise<void>((_resolve, reject) => { rejectGoal = reject; }),
+      );
+      render(<TaskChatComposer onAdd={vi.fn()} workMode="standard"
+        runnerGoalCapability={capability} onRunnerGoalCommand={onRunnerGoalCommand} />);
+      typeText("/goal Ship the feature");
+      pressKey("Enter", { metaKey: true });
+      rejectGoal(new Error("Goal could not be saved"));
+      await flushAsync();
+      expect(editable().textContent).toBe("/goal Ship the feature");
+      expect(sendButton().disabled).toBe(false);
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Goal could not be saved",
+      );
+    });
+
     it("commits a pending agent reassignment before starting the goal", async () => {
       const order: string[] = [];
       const onAdd = vi.fn().mockResolvedValue(undefined);
