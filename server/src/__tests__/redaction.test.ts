@@ -338,6 +338,32 @@ describe("redaction", () => {
     });
   });
 
+  it("redacts complete raw and serialized JSON credential strings with delimiters", () => {
+    for (const value of [
+      'prefix"redaction-tail-canary',
+      "prefix'redaction-tail-canary",
+      "prefix`redaction-tail-canary",
+      "prefix\\redaction-tail-canary",
+      "prefix\nredaction-tail-canary",
+    ]) {
+      const raw = JSON.stringify({ password: value, safe: "retained context" });
+      const redactedRaw = redactSensitiveText(raw);
+      const redactedSerialized = redactSensitiveText(JSON.stringify(raw));
+      expect(redactedRaw).not.toContain("redaction-tail-canary");
+      expect(redactedSerialized).not.toContain("redaction-tail-canary");
+      expect(JSON.parse(redactedRaw)).toEqual({
+        password: REDACTED_EVENT_VALUE,
+        safe: "retained context",
+      });
+      expect(JSON.parse(JSON.parse(redactedSerialized))).toEqual({
+        password: REDACTED_EVENT_VALUE,
+        safe: "retained context",
+      });
+    }
+    expect(redactSensitiveText("{'token':'prefix\\'redaction-tail-canary'}"))
+      .not.toContain("redaction-tail-canary");
+  });
+
   it("redacts common secret shapes from unstructured text", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
