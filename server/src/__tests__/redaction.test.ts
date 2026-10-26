@@ -364,6 +364,27 @@ describe("redaction", () => {
       .not.toContain("redaction-tail-canary");
   });
 
+
+  it.each(["browserCode", "browser_code", "browser-code", "loginUrl", "login_url", "login-url"])(
+    "redacts %s diagnostics even when no other secret hint is present",
+    (key) => {
+      const raw = JSON.stringify({ [key]: "SYNTHETIC_DIAGNOSTIC_CANARY", safe: "retained context" });
+      const serialized = JSON.stringify(raw);
+      const expected = { [key]: REDACTED_EVENT_VALUE, safe: "retained context" };
+      const rawResult = redactSensitiveText(raw);
+      const serializedResult = redactSensitiveText(serialized);
+      expect(JSON.parse(rawResult)).toEqual(expected);
+      expect(JSON.parse(JSON.parse(serializedResult))).toEqual(expected);
+      expect(redactEventPayload({ diagnostics: [raw, serialized] })).toEqual({
+        diagnostics: [rawResult, serializedResult],
+      });
+      expect(redactSensitiveText(rawResult)).toBe(rawResult);
+      expect(redactSensitiveText(serializedResult)).toBe(serializedResult);
+      const ordinary = JSON.stringify({ message: "browser login flow", safe: "retained context" });
+      expect(redactSensitiveText(ordinary)).toBe(ordinary);
+    },
+  );
+
   it("redacts common secret shapes from unstructured text", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";

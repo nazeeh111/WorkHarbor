@@ -359,6 +359,8 @@ const SECRET_TEXT_HINTS = [
   "private",
   "cookie",
   "connectionstring",
+  "browser",
+  "login",
   "sk-",
   "ghp_",
   "gho_",
