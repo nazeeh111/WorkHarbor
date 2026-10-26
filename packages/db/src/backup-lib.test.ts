@@ -377,6 +377,88 @@ describeEmbeddedPostgres("runDatabaseBackup", () => {
   );
 
   it(
+    "preserves check constraints and NULLS NOT DISTINCT uniqueness in JavaScript backups",
+    async () => {
+      const sourceConnectionString = await createTempDatabase();
+      const restoreConnectionString = await createSiblingDatabase(
+        sourceConnectionString,
+        "paperclip_constraint_restore_target",
+      );
+      const backupDir = createTempDir("paperclip-db-constraint-backup-");
+      const sourceSql = postgres(sourceConnectionString, { max: 1, onnotice: () => {} });
+      const restoreSql = postgres(restoreConnectionString, { max: 1, onnotice: () => {} });
+
+      try {
+        await sourceSql.unsafe(`
+          CREATE SCHEMA "backup_constraints";
+          CREATE FUNCTION "backup_constraints"."positive"(value integer)
+          RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT value > 0 $$;
+          CREATE TABLE "backup_constraints"."entries" (
+            "id" integer PRIMARY KEY,
+            "scope" text,
+            "state" text NOT NULL,
+            "value" integer NOT NULL,
+            CONSTRAINT "scope_unique" UNIQUE NULLS NOT DISTINCT ("scope"),
+            CONSTRAINT "state_check" CHECK ("state" IN ('pending', 'done')),
+            CONSTRAINT "positive check" CHECK ("backup_constraints"."positive"("value")) NO INHERIT
+          );
+          INSERT INTO "backup_constraints"."entries" VALUES (1, NULL, 'pending', 1);
+          CREATE TABLE "backup_constraints"."legacy" ("id" integer PRIMARY KEY, "value" integer NOT NULL);
+          INSERT INTO "backup_constraints"."legacy" VALUES (1, -1);
+          ALTER TABLE "backup_constraints"."legacy"
+            ADD CONSTRAINT "positive_later" CHECK ("value" > 0) NOT VALID;
+          CREATE TABLE "backup_constraints"."ordinary_unique" ("id" integer PRIMARY KEY, "value" text UNIQUE);
+          INSERT INTO "backup_constraints"."ordinary_unique" VALUES (1, NULL), (2, NULL), (3, 'existing');
+        `);
+
+        const result = await runDatabaseBackup({
+          connectionString: sourceConnectionString,
+          backupDir,
+          retention: { dailyDays: 7, weeklyWeeks: 4, monthlyMonths: 1 },
+          filenamePrefix: "paperclip-constraints-test",
+          backupEngine: "javascript",
+        });
+        await runDatabaseRestore({
+          connectionString: restoreConnectionString,
+          backupFile: result.backupFile,
+        });
+
+        const constraintQuery = `
+          SELECT t.relname AS table_name, c.conname AS name,
+                 pg_get_constraintdef(c.oid) AS definition,
+                 c.convalidated AS validated, c.connoinherit AS no_inherit
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = 'backup_constraints' AND c.contype IN ('c', 'u')
+          ORDER BY t.relname, c.conname
+        `;
+        expect(await restoreSql.unsafe(constraintQuery)).toEqual(await sourceSql.unsafe(constraintQuery));
+        expect(await restoreSql.unsafe('SELECT * FROM "backup_constraints"."legacy"')).toEqual([
+          { id: 1, value: -1 },
+        ]);
+
+        // Check both original and restored behavior, including ordinary NULL
+        // uniqueness and permitted new writes, rather than only dumped SQL text.
+        for (const sql of [sourceSql, restoreSql]) {
+          await expect(sql.unsafe(`INSERT INTO "backup_constraints"."entries" VALUES (2, NULL, 'pending', 1)`)).rejects.toMatchObject({ code: "23505" });
+          await expect(sql.unsafe(`INSERT INTO "backup_constraints"."entries" VALUES (3, 'invalid-state', 'unknown', 1)`)).rejects.toMatchObject({ code: "23514" });
+          await expect(sql.unsafe(`INSERT INTO "backup_constraints"."entries" VALUES (4, 'invalid-value', 'pending', -1)`)).rejects.toMatchObject({ code: "23514" });
+          await sql.unsafe(`INSERT INTO "backup_constraints"."entries" VALUES (5, 'valid', 'done', 1)`);
+          await expect(sql.unsafe(`INSERT INTO "backup_constraints"."legacy" VALUES (2, -2)`)).rejects.toMatchObject({ code: "23514" });
+          await sql.unsafe(`INSERT INTO "backup_constraints"."legacy" VALUES (3, 1)`);
+          await sql.unsafe(`INSERT INTO "backup_constraints"."ordinary_unique" VALUES (4, NULL)`);
+          await expect(sql.unsafe(`INSERT INTO "backup_constraints"."ordinary_unique" VALUES (5, 'existing')`)).rejects.toMatchObject({ code: "23505" });
+        }
+      } finally {
+        await sourceSql.end();
+        await restoreSql.end();
+      }
+    },
+    60_000,
+  );
+
+  it(
     "preserves composite foreign key column order without duplicate referenced columns",
     async () => {
       const sourceConnectionString = await createTempDatabase();

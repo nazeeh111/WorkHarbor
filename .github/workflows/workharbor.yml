@@ -76,6 +76,14 @@ jobs:
         run: >-
           pnpm --filter @paperclipai/server exec node --import tsx --input-type=module -e
           'const { getEmbeddedPostgresTestSupport } = await import("./src/__tests__/helpers/embedded-postgres.ts"); const support = await getEmbeddedPostgresTestSupport(); if (!support.supported) throw new Error(support.reason || "Embedded PostgreSQL unavailable");'
+      - name: Verify JavaScript backup and restore invariants
+        run: >-
+          pnpm --filter @paperclipai/db exec vitest run src/backup-lib.test.ts
+          --reporter=default --reporter=json --outputFile=workharbor-backup.json
+      - name: Require all backup tests to execute
+        run: >-
+          node --input-type=module -e
+          'import assert from "node:assert/strict"; import { readFileSync } from "node:fs"; const report = JSON.parse(readFileSync("packages/db/workharbor-backup.json", "utf8")); assert.equal(report.success, true); assert.equal(report.numTotalTests, 8); assert.equal(report.numPassedTests, 8); assert.equal(report.numFailedTests, 0); assert.equal(report.numPendingTests, 0);'
       - name: Verify queued-comment locks and mutation contracts
         run: >-
           pnpm --filter @paperclipai/server exec vitest run
