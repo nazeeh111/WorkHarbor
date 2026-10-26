@@ -2,7 +2,7 @@
 
 A local desk for agent work and human decisions. Assign tasks, inspect runs and costs, and keep review evidence beside the work it concerns.
 
-WorkHarbor adapts the [Paperclip](https://github.com/paperclipai/paperclip) control plane for an isolated local workspace. Its additions include a loopback-only launcher with separate state, a way to explore before configuring an agent, and a selected-file change-packet helper. Provider adapters are configured separately; opening the workspace does not require an API key.
+WorkHarbor adapts the Paperclip control plane for an isolated local workspace. Its additions include a loopback-only launcher with separate state, a way to explore before configuring an agent, and a selected-file change-packet helper. Provider adapters are configured separately; opening the workspace does not require an API key.
 
 <picture>
   <source media="(max-width: 600px)" srcset="assets/portfolio/workharbor-task-review-mobile.png">
@@ -52,10 +52,6 @@ The [verification record](doc/workharbor-verification.md) covers local startup, 
 The core supports company-scoped tasks, agent sessions, budgets, approvals, and persistent run history. Internal package names and API identifiers remain compatible with the base engine. Provider-specific features still require their own configuration and access.
 
 [The implementation plan](doc/plans/2026-09-27-workharbor-adaptation.md) records the implementation scope. Technical architecture and development references remain under `doc/`; descriptions of upstream hosted services are not WorkHarbor hosting offers.
-
-## Source and maintenance
-
-Based on Paperclip v2026.916.1 at `d554c4789ed3930f8a53ac9fdf6503b3187097da`. The inherited engine and technical reference material remain available; upstream package publishing and hosted-deployment scripts are not WorkHarbor release instructions. This repository is distributed as source, not as an upstream npm package. WorkHarbor changes were developed and checked locally before publication; the initial repository snapshot is not a record of the engine’s development timeline.
 
 ## License
 
