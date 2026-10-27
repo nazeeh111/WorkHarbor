@@ -1,3 +1,4 @@
+import { redactHomePathUserSegments } from "@paperclipai/adapter-utils";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -378,7 +379,11 @@ export function FailedRunInboxRow({
 }) {
   const issueId = readIssueIdFromRun(run);
   const issue = issueId ? issueById.get(issueId) ?? null : null;
-  const displayError = runFailureMessage(run);
+  const censorUsernameInLogs = useQuery({
+    queryKey: queryKeys.instance.generalSettings,
+    queryFn: () => instanceSettingsApi.getGeneral(),
+  }).data?.censorUsernameInLogs === true;
+  const displayError = redactHomePathUserSegments(runFailureMessage(run), { enabled: censorUsernameInLogs });
   const showUnreadSlot = unreadState !== null;
   const showUnreadDot = unreadState === "visible" || unreadState === "fading";
 

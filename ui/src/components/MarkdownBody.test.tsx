@@ -167,6 +167,35 @@ describe("MarkdownBody", () => {
     expect(html).toContain("Plain text");
   });
 
+  it.each([true, false])("keeps path-bearing HTML escaped with censoring %s", (enabled) => {
+    const html = renderMarkdown(
+      "<div>/Users/sampleuser/project</div>\n\n<script>/home/sampleuser/project</script>",
+      [],
+      { censorHomePathUsernames: enabled },
+    );
+    const username = enabled ? "s*********" : "sampleuser";
+    expect(html).toContain(`&lt;div&gt;/Users/${username}/project&lt;/div&gt;`);
+    expect(html).toContain(`&lt;script&gt;/home/${username}/project&lt;/script&gt;`);
+    expect(html).not.toContain("<div>/Users/");
+    expect(html).not.toContain("<script>");
+  });
+
+  it.each([true, false])("preserves image title/alt and reference targets with censoring %s", (enabled) => {
+    const html = renderMarkdown(
+      '![Alt /Users/sampleuser/project][picture]\n\n[reference][home]\n\n'
+        + '[picture]: /home/sampleuser/image.png "Title /Users/sampleuser/title"\n'
+        + '[home]: /Users/sampleuser/reference',
+      [],
+      { censorHomePathUsernames: enabled },
+    );
+    const username = enabled ? "s*********" : "sampleuser";
+    expect(html).toContain(`src="/home/${username}/image.png"`);
+    expect(html).toContain(`alt="Alt /Users/${username}/project"`);
+    expect(html).toContain(`title="Title /Users/${username}/title"`);
+    expect(html).toContain(`href="/Users/${username}/reference"`);
+    expect(html).toContain(">reference</a>");
+  });
+
   it("hides markdown HTML comments instead of rendering placeholder text", () => {
     const html = renderMarkdown("Before\n\n<!-- -->\n\nAfter");
 

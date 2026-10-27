@@ -50,6 +50,8 @@ jobs:
           src/components/task-chat/TaskChatBubble.test.tsx
           src/lib/sentry.test.ts src/lib/sentry-package-version.test.ts
           src/components/SentryGate.test.tsx
+          src/components/MarkdownBody.test.tsx
+          src/pages/AgentDetail.censoring.test.tsx src/pages/Inbox.test.tsx
       - run: pnpm --filter @paperclipai/ui typecheck
       - run: pnpm --filter @paperclipai/ui build
       - name: Install Chromium for the isolated panel contract
@@ -74,6 +76,8 @@ jobs:
       - run: pnpm --filter @paperclipai/plugin-sdk build
       - name: Verify SSH key retention without provider calls
         run: pnpm --filter @paperclipai/server exec vitest run src/__tests__/environment-ssh-retention.test.ts
+      - name: Verify import spool retention without provider calls
+        run: pnpm --filter @paperclipai/server exec vitest run src/__tests__/company-import-transfer-sweep.test.ts
       - name: Require embedded PostgreSQL test support
         run: >-
           pnpm --filter @paperclipai/server exec node --import tsx --input-type=module -e

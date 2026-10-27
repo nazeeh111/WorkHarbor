@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ComponentProps } from "react";
+import { act as reactAct, type ComponentProps } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -38,6 +38,7 @@ const apiMocks = vi.hoisted(() => ({
   heartbeatRunsList: vi.fn(),
   liveRunsForCompany: vi.fn(),
   experimentalSettings: vi.fn(),
+  generalSettings: vi.fn(async () => ({ censorUsernameInLogs: false })),
   projectsList: vi.fn(),
 }));
 
@@ -93,7 +94,7 @@ vi.mock("../api/heartbeats", () => ({
 }));
 
 vi.mock("../api/instanceSettings", () => ({
-  instanceSettingsApi: { getExperimental: apiMocks.experimentalSettings },
+  instanceSettingsApi: { getExperimental: apiMocks.experimentalSettings, getGeneral: apiMocks.generalSettings },
 }));
 
 vi.mock("../api/projects", () => ({
@@ -142,6 +143,9 @@ vi.mock("../hooks/useIssueExternalObjects", () => ({
     isReady: true,
   }),
 }));
+
+import { queryKeys } from "../lib/queryKeys";
+import { FailedRunInboxRow as LegacyFailedRunInboxRow } from "./LegacyInbox";
 
 import {
   FailedRunInboxRow,
@@ -369,6 +373,7 @@ function resetInboxApiMocks() {
     enableIsolatedWorkspaces: false,
     enableStreamlinedUi: true,
   });
+  apiMocks.generalSettings.mockResolvedValue({ censorUsernameInLogs: false });
   apiMocks.projectsList.mockResolvedValue([]);
 }
 
@@ -1372,6 +1377,7 @@ describe("FailedRunInboxRow", () => {
 
     act(() => {
       root.render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } } })}>
         <FailedRunInboxRow
           run={run}
           issueById={new Map()}
@@ -1381,7 +1387,8 @@ describe("FailedRunInboxRow", () => {
           onRetry={() => {}}
           isRetrying={false}
           selected
-        />,
+        />
+        </QueryClientProvider>,
       );
     });
 
@@ -1393,6 +1400,72 @@ describe("FailedRunInboxRow", () => {
     act(() => {
       root.unmount();
     });
+  });
+});
+
+describe.each([
+  ["streamlined", FailedRunInboxRow],
+  ["legacy", LegacyFailedRunInboxRow],
+] as const)("%s failed-run log censoring", (_name, Row) => {
+  it.each([true, false, undefined])("masks error and stderr fallback only when enabled (%s)", async (setting) => {
+    for (const field of ["error", "stderrExcerpt"] as const) {
+      const run = createFailedRun({ error: null, [field]: "\n /Users/sampleuser/project failed\nignored second line" });
+      const before = JSON.stringify(run);
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } } });
+      if (setting !== undefined) client.setQueryData(queryKeys.instance.generalSettings, { censorUsernameInLogs: setting });
+      apiMocks.generalSettings.mockResolvedValue({ censorUsernameInLogs: false });
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      try {
+        await reactAct(async () => root.render(
+          <QueryClientProvider client={client}>
+            <Row run={run} issueById={new Map()} agentName="Synthetic Agent" issueLinkState={null}
+              onDismiss={() => {}} onRetry={() => {}} isRetrying={false} />
+          </QueryClientProvider>,
+        ));
+        expect(container.textContent).toContain(setting === true ? "/Users/s*********/project failed" : "/Users/sampleuser/project failed");
+        expect(container.textContent).not.toContain("ignored second line");
+        expect(JSON.stringify(run)).toBe(before);
+      } finally {
+        await reactAct(async () => root.unmount());
+        client.clear();
+        container.remove();
+      }
+    }
+  });
+
+  it("updates the mounted row when the cached setting switches off without replacing the row", async () => {
+    const run = createFailedRun({ error: "Failed /home/sampleuser/project", stderrExcerpt: "stderr must not replace error" });
+    const before = JSON.stringify(run);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: 0 } } });
+    client.setQueryData(queryKeys.instance.generalSettings, { censorUsernameInLogs: true });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      await reactAct(async () => root.render(
+        <QueryClientProvider client={client}>
+          <Row run={run} issueById={new Map()} agentName="Synthetic Agent" issueLinkState={null}
+            onDismiss={() => {}} onRetry={() => {}} isRetrying={false} />
+        </QueryClientProvider>,
+      ));
+      expect(container.textContent).toContain("/home/s*********/project");
+      expect(container.textContent).not.toContain("stderr must not replace error");
+      const originalLink = container.querySelector("a");
+      await reactAct(async () => {
+        client.setQueryData(queryKeys.instance.generalSettings, { censorUsernameInLogs: false });
+        // React Query batches observer notifications onto the next task.
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(container.textContent).toContain("/home/sampleuser/project");
+      expect(container.querySelector("a")).toBe(originalLink);
+      expect(JSON.stringify(run)).toBe(before);
+    } finally {
+      await reactAct(async () => root.unmount());
+      client.clear();
+      container.remove();
+    }
   });
 });
 
