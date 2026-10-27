@@ -558,7 +558,6 @@ export async function normalizeEnvironmentConfigForPersistence(input: {
         issues: parsed.error.issues,
       });
     }
-    const secrets = secretService(input.db);
     const { privateKey, ...stored } = parsed.data;
     let nextPrivateKeySecretRef = stored.privateKeySecretRef;
     if (privateKey) {
@@ -572,12 +571,9 @@ export async function normalizeEnvironmentConfigForPersistence(input: {
         value: privateKey,
         actor: input.actor,
       });
-      if (
-        stored.privateKeySecretRef &&
-        stored.privateKeySecretRef.secretId !== nextPrivateKeySecretRef.secretId
-      ) {
-        await secrets.remove(stored.privateKeySecretRef.secretId);
-      }
+      // Environment edits replace references, never the referenced secret.
+      // The old key may be shared, and the environment save can still fail.
+      // Retained keys are deleted only through explicit secret management.
     }
     return {
       ...stored,

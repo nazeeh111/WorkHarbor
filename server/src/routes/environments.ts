@@ -44,7 +44,6 @@ import {
   collectEnvironmentSecretRefs,
   normalizeEnvironmentConfigForPersistence,
   normalizeEnvironmentConfigForProbe,
-  readSshEnvironmentPrivateKeySecretId,
   type ParsedEnvironmentConfig,
 } from "../services/environment-config.js";
 import { probeEnvironment } from "../services/environment-probe.js";
@@ -1356,10 +1355,8 @@ export function environmentRoutes(
         ),
       ]),
     );
-    const secretId = readSshEnvironmentPrivateKeySecretId(existing);
-    if (secretId) {
-      await secrets.remove(secretId);
-    }
+    // Only detach this environment's bindings. Referenced keys may be shared;
+    // deleting retained secrets requires explicit secret management.
     await logInstanceEnvironmentActivity({
       actor,
       action: "environment.deleted",
