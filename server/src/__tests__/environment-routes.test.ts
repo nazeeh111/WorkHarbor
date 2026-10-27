@@ -1943,7 +1943,7 @@ describe("environment routes", () => {
         { replaceAll: true },
       );
     }
-    expect(mockSecretService.remove).toHaveBeenCalledWith("11111111-1111-1111-1111-111111111111");
+    expect(mockSecretService.remove).not.toHaveBeenCalled();
     expect(mockLogActivity).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

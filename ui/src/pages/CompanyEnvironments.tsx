@@ -2310,7 +2310,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                         setEnvironmentForm((current) => ({ ...current, sshRemoteWorkspacePath: e.target.value }))}
                     />
                   </Field>
-                  <Field label="Private key" hint="Optional PEM private key. Leave blank to rely on the server's SSH agent or default keychain.">
+                  <Field label="Private key" hint="Optional PEM private key. Without a saved or pasted key, the server uses its SSH agent or default keychain. Pasted keys are saved in Secrets; replacing or deleting this environment keeps saved keys. Some failed saves can also leave a newly created key. Review retained keys in the owning organization’s Secrets page.">
                     <div className="space-y-2">
                       <select
                         className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
@@ -2521,6 +2521,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                             .filter(Boolean)
                             .join(" ")
                             || "This environment will be permanently deleted and future runs stop resolving to it.")}
+                    {" "}Saved SSH keys remain after deletion. Review retained keys in the owning organization’s Secrets page and delete them explicitly when intended.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 {reusableLeaseHolderGroups.length > 0 ? (
