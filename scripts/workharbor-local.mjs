@@ -61,18 +61,29 @@ export function main(args = process.argv.slice(2)) {
   let spec;
   try { spec = localCommand(args); }
   catch (err) { console.error(`WorkHarbor: ${err.message}`); process.exitCode = 2; return; }
-  const child = spawn(spec.command, spec.args, { cwd: spec.cwd, env: spec.env, stdio: 'inherit', shell: false });
-  const onInt = () => child.kill('SIGINT');
-  const onTerm = () => child.kill('SIGTERM');
+  let child;
+  let stopping = false;
+  const onInt = () => { stopping = true; child?.kill('SIGINT'); };
+  const onTerm = () => { stopping = true; child?.kill('SIGTERM'); };
   process.on('SIGINT', onInt);
   process.on('SIGTERM', onTerm);
   const detach = () => { process.off('SIGINT', onInt); process.off('SIGTERM', onTerm); };
-  child.once('error', () => {
-    detach();
-    console.error('WorkHarbor could not start pnpm. Install the pinned package manager and dependencies, then retry.');
-    process.exitCode = 2;
-  });
-  child.once('exit', (code, signal) => { detach(); process.exitCode = code ?? (signal === 'SIGINT' ? 130 : 1); });
+  function launch(commandArgs, bootstrap = false) {
+    child = spawn(spec.command, commandArgs, { cwd: spec.cwd, env: spec.env, stdio: 'inherit', shell: false });
+    child.once('error', () => {
+      detach();
+      console.error('WorkHarbor could not start pnpm. Install the pinned package manager and dependencies, then retry.');
+      process.exitCode = 2;
+    });
+    child.once('exit', (code, signal) => {
+      if (bootstrap && code === 0 && !stopping) { launch(spec.args); return; }
+      detach();
+      process.exitCode = code ?? (signal === 'SIGINT' ? 130 : 1);
+    });
+  }
+  if (spec.args[0] === 'dev:once') {
+    launch(['--filter', '@paperclipai/server', 'exec', 'tsx', '../scripts/workharbor-bootstrap.ts', spec.env.PAPERCLIP_CONFIG], true);
+  } else launch(spec.args);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

@@ -34,6 +34,8 @@ node scripts/workharbor-local.mjs start
 
 The launcher uses loopback on port 3180 and keeps application data in `.workharbor/` beside the source. It disables first-party telemetry and announcements, ignores the working-directory `.env`, and does not inherit provider credentials or a database URL from the shell. Configure providers explicitly within this instance.
 
+Before starting services, it initializes the selected instance's agent authentication key so local runs can call the control-plane API. Existing instance keys and configuration are preserved.
+
 Scheduled agent runs are off by default. Manual task actions can still invoke configured agents. Use `--schedule` when deliberately enabling scheduled work; internal housekeeping still runs regardless of that flag.
 
 ```sh
