@@ -25,7 +25,7 @@ describe("bundled UI font assets", () => {
   });
 
   it("includes redistribution notice text for the bundled Inter files", () => {
-    const notice = readFileSync(path.join(fontDir, "NOTICE.md"), "utf8");
+    const notice = readFileSync(path.join(fontDir, "LICENSE.md"), "utf8");
 
     expect(notice).toContain("Inter");
     expect(notice).toContain("v4.1");

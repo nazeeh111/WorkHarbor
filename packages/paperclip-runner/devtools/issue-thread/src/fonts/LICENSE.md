@@ -1,4 +1,4 @@
-# Capability issue-thread fonts
+# WorkHarbor issue-thread fonts
 
 The Capability issue-thread bundle includes Latin-subset WOFF2 files so captures
 do not depend on fonts installed on the host.
