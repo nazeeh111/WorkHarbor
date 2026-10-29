@@ -58,6 +58,28 @@ GitHub repos for repo-only project workspaces and refreshing worktree base
 refs. See
 [Execution workspaces](../guides/board-operator/execution-workspaces-and-runtime-services.md#private-repositories-and-repo-only-project-workspaces).
 
+## Retained SSH Keys
+
+Pasting an SSH private key into an environment creates a saved key in the
+owning organization’s Secrets page. Replacing the key or deleting the
+environment does not delete saved keys. Key creation happens before the
+environment and binding writes, so some failed saves leave a newly created,
+unbound key. Repeated attempts can accumulate keys; there is no automatic
+cleanup or retry deduplication.
+
+Review retained keys in the owning organization’s Secrets page and delete them
+explicitly only when intended. Explicit deletion can break active or shared
+consumers. Zero recorded bindings does not prove a key has no external use.
+Deleting the saved key does not revoke access already configured on a remote
+SSH host.
+
+Environment deletion removes the row before clearing selections and bindings.
+If cleanup fails, the row can be gone while stale bindings remain, and retrying
+can return 404. Secret deletion also has provider-specific recovery limits:
+metadata can be marked deleted before provider deletion fails. Recovery depends
+on the provider and available backups; neither operation guarantees atomic
+cleanup or restoration.
+
 ## User-Specific Secrets
 
 User-specific secrets let a shared agent or project declare a slot such as

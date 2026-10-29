@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, WrapText } from "lucide-react";
 import Markdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { remarkHomePathRedaction } from "../lib/remark-home-path-redaction";
 import { cn } from "../lib/utils";
 import { GithubIcon } from "@/components/icons/github-icon";
 import { Link, useCaseHref } from "@/lib/router";
@@ -65,6 +66,8 @@ export type MarkdownExternalReferenceMap = Record<string, MarkdownExternalRefere
 
 interface MarkdownBodyProps {
   children: string;
+  /** Mask home-path usernames in parsed content without changing Markdown syntax. */
+  censorHomePathUsernames?: boolean;
   className?: string;
   style?: React.CSSProperties;
   softBreaks?: boolean;
@@ -708,6 +711,7 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
 
 function MarkdownBodyImpl({
   children,
+  censorHomePathUsernames = false,
   className,
   style,
   softBreaks = true,
@@ -765,8 +769,9 @@ function MarkdownBodyImpl({
     if (softBreaks) {
       plugins.push(remarkSoftBreaks);
     }
+    if (censorHomePathUsernames) plugins.push(remarkHomePathRedaction);
     return plugins;
-  }, [enableWikiLinks, wikiLinkRoot, resolveWikiLinkHref, resolveWorkspaceFileRef, linkIssueReferences, linkCaseReferences, knownPrefixes, softBreaks]);
+  }, [censorHomePathUsernames, enableWikiLinks, wikiLinkRoot, resolveWikiLinkHref, resolveWorkspaceFileRef, linkIssueReferences, linkCaseReferences, knownPrefixes, softBreaks]);
   const components = useMemo<Components>(() => {
     const map: Components = {
     p: ({ node: _node, style: paragraphStyle, children: paragraphChildren, ...paragraphProps }) => (

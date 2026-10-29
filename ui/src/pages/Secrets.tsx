@@ -1809,6 +1809,10 @@ export function Secrets() {
         <KeyRound className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-lg font-semibold">Secrets</h1>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Saved SSH keys remain after environment changes or deletion. Some failed saves also leave a newly created key.
+        Review retained keys here in the owning organization and delete them explicitly when intended.
+      </p>
 
       <Tabs
         value={activeTab}
@@ -3181,6 +3185,7 @@ export function Secrets() {
             <DialogTitle>Delete secret</DialogTitle>
             <DialogDescription>
               Permanently removes <strong>{deleteConfirm?.name}</strong>. Active bindings will fail until you remap them.
+              Deleting a shared key can also break other consumers. Zero recorded bindings does not prove there is no external use.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

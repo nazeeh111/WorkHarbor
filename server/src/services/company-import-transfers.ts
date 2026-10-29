@@ -152,7 +152,9 @@ export async function sweepAbandonedImportTransferSpools(
   for (const entry of entries) {
     if (!entry.isDirectory() || !isImportTransferRunId(entry.name)) continue;
     const runId = entry.name;
-    const run = await companyTransferRunService.getRun(db, runId).catch(() => null);
+    // A failed lookup cannot establish that this directory is orphaned.
+    // Propagate it so the caller logs the failure and preserves the spool.
+    const run = await companyTransferRunService.getRun(db, runId);
     if (run) {
       if (run.status === "completed" || run.status === "cancelled") {
         // Terminal runs never assemble again; a leftover spool (e.g. a
