@@ -30,6 +30,9 @@ describe("bundled UI font assets", () => {
     expect(notice).toContain("Inter");
     expect(notice).toContain("v4.1");
     expect(notice).toContain("SIL Open Font License 1.1");
+    expect(notice).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    expect(notice).toContain("PERMISSION AND CONDITIONS");
+    expect(notice).toContain("TERMINATION");
     expect(notice).toContain("InterVariable.woff2");
     expect(notice).toContain("InterVariable-Italic.woff2");
   });
