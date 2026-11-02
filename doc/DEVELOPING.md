@@ -17,29 +17,23 @@ Current implementation status:
 
 ## Dependency Lockfile Policy
 
-GitHub Actions owns `pnpm-lock.yaml`.
+WorkHarbor keeps `pnpm-lock.yaml` in sync with dependency manifests in the
+same pull request. When a dependency change requires a lockfile update, use the
+pnpm version pinned in `package.json` to regenerate it, then review and include
+its diff with the manifest changes. Do not hand-edit the lockfile or suppress
+patched-dependency errors to make an install pass.
 
-- Do not commit `pnpm-lock.yaml` in pull requests.
-- Pull request CI validates dependency resolution when manifests change.
-- Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
+`Verify WorkHarbor` runs frozen installs on pull requests and pushes to `main`.
+It uses read-only repository permissions and does not regenerate or commit the
+lockfile. The upstream Paperclip lockfile bot workflow described by older versions
+of this guide is not part of this fork's workflow.
 
-## Trusted PR Workflow
+## Pull Request Verification
 
-The PR caller uses `paperclipai/paperclip/.github/workflows/pr-trusted.yml@master`.
-The AWS runner group `paperclip-public-pr` must allow
-`paperclipai/paperclip/.github/workflows/pr-trusted.yml@refs/heads/master`.
-New workflow versions merged into master then receive runner access without a
-separate SHA allowlist update. Dependabot leaves this first-party reference on
-master.
-
-Keep the `.github/**` rule in `.github/CODEOWNERS` and the active master ruleset's
-code-owner review requirement enabled. This covers the caller, the trusted
-workflow, and CODEOWNERS itself. Existing administrator pull-request bypasses
-remain governed by the repository ruleset.
-
-When changing the workflow path or branch, authorize the new reference before
-updating the caller. Retain older authorized SHA references while queued runs or
-supported reruns still use them.
+This fork runs `.github/workflows/workharbor.yml`; it does not invoke Paperclip's
+upstream trusted PR workflow. Its checks cover the listed WorkHarbor paths, not
+the entire workspace. Follow [AGENTS.md](../AGENTS.md) for the full verification
+expected before a PR-ready handoff.
 
 ## Start Dev
 
@@ -223,8 +217,9 @@ Worktree dependency provisioning records its fingerprint only after a successful
 install. Frozen installs with outdated lockfiles or patched-dependency hash
 mismatches retry once without `--frozen-lockfile`; other failures retain their
 exit status. Patch contents are part of the install fingerprint. Generated
-lockfile changes remain local to the worktree; the repository's lockfile bot
-owns committed updates.
+lockfile changes from this recovery remain local to the worktree. For intentional
+dependency changes, review and include the regenerated lockfile as described in
+[Dependency Lockfile Policy](#dependency-lockfile-policy).
 
 ## Hot-Restart Deploys
 
