@@ -6,14 +6,21 @@ updates:
       interval: weekly
       day: monday
       time: "06:00"
-    # Each dependency update gets its own pull request, including major
-    # version bumps. A grouped major PR cannot merge when one member has
-    # a blocked upgrade, so it hides the other ready majors. Separate PRs
-    # let each major land on its own. The limit holds the initial burst
-    # of pending majors plus the regular minor and patch updates.
+    # Keep unrelated updates separate, including major upgrades, so one
+    # blocked dependency does not hold back the others.
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      # React and its DOM renderer must resolve to the same version.
+      # Review their runtime and type updates together.
+      react:
+        applies-to: version-updates
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
     # Dependabot's npm parser reads only dependencies, devDependencies, and
     # optionalDependencies — never peerDependencies. It cannot see the
     # optional OpenTelemetry peer dependencies in server/package.json, so it
