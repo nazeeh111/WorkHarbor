@@ -1,5 +1,10 @@
 # Cloud build readiness
 
+> **WorkHarbor fork:** The workflows described below are upstream Paperclip
+> context and are not included in this fork. They do not establish cloud readiness
+> for WorkHarbor. See [Pull Request Verification](DEVELOPING.md#pull-request-verification)
+> for the checks run here.
+
 The `Cloud readiness` workflow starts for every master push. Its versioned
 `Cloud deployable v1` job succeeds only after all three prerequisites succeed:
 
